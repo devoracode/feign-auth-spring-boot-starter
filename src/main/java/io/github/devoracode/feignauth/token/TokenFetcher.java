@@ -227,8 +227,8 @@ public class TokenFetcher {
     /**
      * Fetches a token using an HTTP GET request, appending credentials as query parameters.
      *
-     * <p>Field name defaults: {@code clientId} → {@code "clientId"},
-     * {@code clientSecret} → {@code "clientSecret"}.
+     * <p>Field name defaults: {@code clientId} → {@code "client_id"},
+     * {@code clientSecret} → {@code "client_secret"}.
      * The grant type parameter is only appended when both the field name
      * ({@link FeignAuthProperties.RequestFields#getGrantType()}) and the value
      * ({@link FeignAuthProperties.ClientConfig#getGrantType()}) are non-blank.
@@ -239,8 +239,8 @@ public class TokenFetcher {
      */
     private TokenCacheEntry fetchTokenByGet(FeignAuthProperties.AuthConfig auth, FeignAuthProperties.ClientConfig client) {
         FeignAuthProperties.RequestFields fields = auth.getRequestFields();
-        String clientIdField     = StringUtils.defaultIfBlank(fields.getClientId(),     "clientId");
-        String clientSecretField = StringUtils.defaultIfBlank(fields.getClientSecret(), "clientSecret");
+        String clientIdField     = StringUtils.defaultIfBlank(fields.getClientId(),     "client_id");
+        String clientSecretField = StringUtils.defaultIfBlank(fields.getClientSecret(), "client_secret");
 
         UriComponentsBuilder builder = UriComponentsBuilder.fromHttpUrl(auth.getTokenUrl())
                 .queryParam(clientIdField,     client.getId())
@@ -257,8 +257,8 @@ public class TokenFetcher {
     /**
      * Fetches a token using an HTTP POST request with a JSON body containing credentials.
      *
-     * <p>Field name defaults: {@code clientId} → {@code "clientId"},
-     * {@code clientSecret} → {@code "clientSecret"}.
+     * <p>Field name defaults: {@code clientId} → {@code "client_id"},
+     * {@code clientSecret} → {@code "client_secret"}.
      * The grant type entry is only added to the request body when both the field name
      * ({@link FeignAuthProperties.RequestFields#getGrantType()}) and the value
      * ({@link FeignAuthProperties.ClientConfig#getGrantType()}) are non-blank.
@@ -269,8 +269,8 @@ public class TokenFetcher {
      */
     private TokenCacheEntry fetchTokenByPost(FeignAuthProperties.AuthConfig auth, FeignAuthProperties.ClientConfig client) {
         FeignAuthProperties.RequestFields fields = auth.getRequestFields();
-        String clientIdField     = StringUtils.defaultIfBlank(fields.getClientId(),     "clientId");
-        String clientSecretField = StringUtils.defaultIfBlank(fields.getClientSecret(), "clientSecret");
+        String clientIdField     = StringUtils.defaultIfBlank(fields.getClientId(),     "client_id");
+        String clientSecretField = StringUtils.defaultIfBlank(fields.getClientSecret(), "client_secret");
 
         Map<String, String> body = new HashMap<>();
         body.put(clientIdField,     client.getId());

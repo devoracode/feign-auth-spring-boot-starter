@@ -75,7 +75,7 @@ feign:
             grant-type: client_credentials
 ```
 
-`request-fields` 中只有 `grant-type` 需要显式配置，`client-id` 和 `client-secret` 不配置时会自动使用默认字段名 `clientId` 和 `clientSecret`。如果目标服务不需要 `grant_type` 参数，可以完全省略 `request-fields` 和 `clients[].grant-type`。
+`request-fields` 中只有 `grant-type` 需要显式配置，`client-id` 和 `client-secret` 不配置时会自动使用默认字段名 `client_id` 和 `client_secret`。如果目标服务不需要 `grant_type` 参数，可以完全省略 `request-fields` 和 `clients[].grant-type`。
 
 然后在 FeignClient 上指定 `configuration = FeignClientConfig.class`：
 
@@ -143,8 +143,8 @@ feign:
 | `auth.token-header` | 否 | `x-token` | 注入 Token 时使用的请求 Header 名称。 |
 | `auth.token-field` | 否 | 空 | Token 响应中 accessToken 的字段路径，支持 `data.accessToken` 这样的多级路径。不填时自动识别 `access_token`、`accessToken`、`token`。 |
 | `auth.expire-ahead-seconds` | 否 | `60` | Token 过期前多少秒刷新缓存。 |
-| `auth.request-fields.client-id` | 否 | `clientId` | Token 请求中 client id 的字段名。不配置时使用默认值 `clientId`。 |
-| `auth.request-fields.client-secret` | 否 | `clientSecret` | Token 请求中 client secret 的字段名。不配置时使用默认值 `clientSecret`。 |
+| `auth.request-fields.client-id` | 否 | `client_id` | Token 请求中 client id 的字段名。不配置时使用默认值 `client_id`。 |
+| `auth.request-fields.client-secret` | 否 | `client_secret` | Token 请求中 client secret 的字段名。不配置时使用默认值 `client_secret`。 |
 | `auth.request-fields.grant-type` | 否 | 空 | Token 请求中 grant type 的字段名。**不配置时 grant type 参数不会出现在请求中**，适用于不需要该参数的服务。 |
 | `auth.clients[].id` | 是 | 无 | OAuth2 client id。 |
 | `auth.clients[].secret` | 是 | 无 | OAuth2 client secret。 |
@@ -157,15 +157,15 @@ feign:
 
 starter 根据配置动态构建 Token 请求参数：
 
-- `client-id`、`client-secret`：字段名不配置时默认使用 `clientId` 和 `clientSecret`。
+- `client-id`、`client-secret`：字段名不配置时默认使用 `client_id` 和 `client_secret`。
 - `grant-type`：**只有同时配置了 `auth.request-fields.grant-type`（字段名）和 `auth.clients[].grant-type`（字段值）时才会出现在请求中**。不配置时该参数完全不发送，适用于不需要 grant type 参数的第三方服务。
 
 当 `method: post` 时，starter 会发送 JSON 请求体。假设配置了完整的 request-fields 和 grant-type：
 
 ```json
 {
-  "clientId": "measure-event-client",
-  "clientSecret": "measure-event-secret",
+  "client_id": "measure-event-client",
+  "client_secret": "measure-event-secret",
   "grantType": "client_credentials"
 }
 ```
