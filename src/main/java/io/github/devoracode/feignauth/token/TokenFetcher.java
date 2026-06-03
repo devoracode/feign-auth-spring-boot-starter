@@ -227,24 +227,41 @@ public class TokenFetcher {
     /**
      * Fetches a token using an HTTP GET request, appending credentials as query parameters.
      *
+     * <p>Field name defaults: {@code clientId} → {@code "clientId"},
+     * {@code clientSecret} → {@code "clientSecret"}.
+     * The grant type parameter is only appended when both the field name
+     * ({@link FeignAuthProperties.RequestFields#getGrantType()}) and the value
+     * ({@link FeignAuthProperties.ClientConfig#getGrantType()}) are non-blank.
+     *
      * @param auth   the authentication configuration providing the token URL and field names
      * @param client the OAuth2 client credentials
      * @return a populated {@link TokenCacheEntry}
      */
     private TokenCacheEntry fetchTokenByGet(FeignAuthProperties.AuthConfig auth, FeignAuthProperties.ClientConfig client) {
         FeignAuthProperties.RequestFields fields = auth.getRequestFields();
-        String url = UriComponentsBuilder.fromHttpUrl(auth.getTokenUrl())
-                .queryParam(fields.getClientId(), client.getId())
-                .queryParam(fields.getClientSecret(), client.getSecret())
-                .queryParam(fields.getGrantType(), client.getGrantType())
-                .toUriString();
+        String clientIdField     = StringUtils.defaultIfBlank(fields.getClientId(),     "clientId");
+        String clientSecretField = StringUtils.defaultIfBlank(fields.getClientSecret(), "clientSecret");
 
-        ResponseEntity<String> response = restTemplate.getForEntity(url, String.class);
+        UriComponentsBuilder builder = UriComponentsBuilder.fromHttpUrl(auth.getTokenUrl())
+                .queryParam(clientIdField,     client.getId())
+                .queryParam(clientSecretField, client.getSecret());
+
+        if (StringUtils.isNotBlank(fields.getGrantType()) && StringUtils.isNotBlank(client.getGrantType())) {
+            builder.queryParam(fields.getGrantType(), client.getGrantType());
+        }
+
+        ResponseEntity<String> response = restTemplate.getForEntity(builder.toUriString(), String.class);
         return parseTokenResponse(response, auth.getExpireAheadSeconds(), auth.getTokenField());
     }
 
     /**
      * Fetches a token using an HTTP POST request with a JSON body containing credentials.
+     *
+     * <p>Field name defaults: {@code clientId} → {@code "clientId"},
+     * {@code clientSecret} → {@code "clientSecret"}.
+     * The grant type entry is only added to the request body when both the field name
+     * ({@link FeignAuthProperties.RequestFields#getGrantType()}) and the value
+     * ({@link FeignAuthProperties.ClientConfig#getGrantType()}) are non-blank.
      *
      * @param auth   the authentication configuration providing the token URL and field names
      * @param client the OAuth2 client credentials
@@ -252,10 +269,16 @@ public class TokenFetcher {
      */
     private TokenCacheEntry fetchTokenByPost(FeignAuthProperties.AuthConfig auth, FeignAuthProperties.ClientConfig client) {
         FeignAuthProperties.RequestFields fields = auth.getRequestFields();
+        String clientIdField     = StringUtils.defaultIfBlank(fields.getClientId(),     "clientId");
+        String clientSecretField = StringUtils.defaultIfBlank(fields.getClientSecret(), "clientSecret");
+
         Map<String, String> body = new HashMap<>();
-        body.put(fields.getClientId(), client.getId());
-        body.put(fields.getClientSecret(), client.getSecret());
-        body.put(fields.getGrantType(), client.getGrantType());
+        body.put(clientIdField,     client.getId());
+        body.put(clientSecretField, client.getSecret());
+
+        if (StringUtils.isNotBlank(fields.getGrantType()) && StringUtils.isNotBlank(client.getGrantType())) {
+            body.put(fields.getGrantType(), client.getGrantType());
+        }
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);

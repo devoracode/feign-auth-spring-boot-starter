@@ -235,24 +235,31 @@ public class FeignAuthProperties {
      * <p>Different OAuth2 servers may use non-standard field names. This class
      * allows the caller to map the logical field roles to whatever names the
      * target server expects.
+     *
+     * <p>All fields default to {@code null}. When {@code null}, they are not
+     * included in the token request, allowing services that do not accept certain
+     * parameters (e.g., {@code grant_type}) to work correctly.
      */
     @Data
     public static class RequestFields {
 
         /**
-         * Field name for the client ID in the token request. Defaults to {@code clientId}.
+         * Field name for the client ID in the token request.
+         * When {@code null}, defaults to {@code clientId} at request-build time.
          */
-        private String clientId = "clientId";
+        private String clientId;
 
         /**
-         * Field name for the client secret in the token request. Defaults to {@code clientSecret}.
+         * Field name for the client secret in the token request.
+         * When {@code null}, defaults to {@code clientSecret} at request-build time.
          */
-        private String clientSecret = "clientSecret";
+        private String clientSecret;
 
         /**
-         * Field name for the grant type in the token request. Defaults to {@code grantType}.
+         * Field name for the grant type in the token request.
+         * When {@code null}, the grant type parameter is omitted from the request.
          */
-        private String grantType = "grantType";
+        private String grantType;
     }
 
     /**
@@ -276,10 +283,12 @@ public class FeignAuthProperties {
         private String secret;
 
         /**
-         * OAuth2 grant type value sent in the token request. Defaults to
-         * {@code client_credentials}.
+         * OAuth2 grant type value sent in the token request.
+         * When {@code null}, the grant type parameter is omitted from the request.
+         * Set explicitly (e.g. {@code client_credentials}) when the token endpoint
+         * requires it.
          */
-        private String grantType = "client_credentials";
+        private String grantType;
 
         /**
          * Request path prefixes that this client should be selected for.
