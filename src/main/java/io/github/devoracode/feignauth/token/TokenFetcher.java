@@ -21,17 +21,56 @@ import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.StreamSupport;
 
+/**
+ * Fetches and caches OAuth2 access tokens for configured services.
+ *
+ * <p>For each (service, client) pair, the token is retrieved once and then stored in
+ * an in-memory {@link ConcurrentHashMap}. Subsequent calls return the cached token
+ * until it expires (taking {@code expireAheadSeconds} into account), at which point a
+ * new token is fetched under a {@code synchronized} block to avoid duplicate requests.
+ *
+ * <p>Token acquisition supports both {@code GET} and {@code POST} HTTP methods. The
+ * field names used in the request (client ID, client secret, grant type) are
+ * configurable via {@link FeignAuthProperties.RequestFields}.
+ *
+ * <p>Token responses are parsed leniently: the access token value is looked up under
+ * the field names {@code access_token}, {@code accessToken}, and {@code token}
+ * (in that order). Expiry information is read from {@code expires_in}, {@code expiresIn},
+ * {@code expire_in}, and {@code expireIn}; if none is present, a default TTL of
+ * {@value DEFAULT_EXPIRES_IN_SECONDS} seconds is used.
+ *
+ * @author Wenjie Liu
+ * @since 1.0.0
+ * @see TokenCacheEntry
+ * @see FeignAuthProperties
+ */
 @Slf4j
 @RequiredArgsConstructor
 public class TokenFetcher {
 
+    /** Default token TTL used when the token response does not include an expiry field. */
     private static final long DEFAULT_EXPIRES_IN_SECONDS = 7200L;
 
     private final FeignAuthProperties feignAuthProperties;
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
+
+    /** In-memory token cache keyed by {@code "<serviceName>:<clientId>"}. */
     private final Map<String, TokenCacheEntry> tokenCache = new ConcurrentHashMap<>();
 
+    /**
+     * Returns a valid OAuth2 access token for the given service and request path.
+     *
+     * <p>The method selects the appropriate {@link FeignAuthProperties.ClientConfig} for
+     * the provided {@code requestPath} and then returns a cached or freshly fetched token.
+     *
+     * @param serviceName the logical service name as defined in
+     *                    {@link FeignAuthProperties#services}
+     * @param requestPath the normalized request path used to select the correct client
+     * @return a non-blank access token string
+     * @throws IllegalStateException if the service is not configured, is not in OAuth2 mode,
+     *                               no matching client exists, or token acquisition fails
+     */
     public String getToken(String serviceName, String requestPath) {
         FeignAuthProperties.ServiceConfig service = getServiceConfig(serviceName);
         FeignAuthProperties.AuthConfig auth = service.getAuth();
@@ -43,6 +82,25 @@ public class TokenFetcher {
         return getCachedOrFetch(serviceName, service, client);
     }
 
+    /**
+     * Selects the {@link FeignAuthProperties.ClientConfig} that best matches the given
+     * request path within a service.
+     *
+     * <p>Selection follows the longest-prefix-match rule:
+     * <ol>
+     *   <li>Clients whose {@code pathPrefixes} match the request path are ranked by
+     *       the length of the matched prefix; the client with the longest match wins.</li>
+     *   <li>If no prefix matches, the unique default client (one without any
+     *       {@code pathPrefixes}) is returned.</li>
+     * </ol>
+     *
+     * @param serviceName the logical service name (used in exception messages)
+     * @param service     the service configuration
+     * @param requestPath the normalized request path
+     * @return the selected {@link FeignAuthProperties.ClientConfig}; never {@code null}
+     * @throws IllegalStateException if no client matches, multiple clients share the same
+     *                               best prefix length, or multiple default clients are found
+     */
     public FeignAuthProperties.ClientConfig resolveClient(String serviceName, FeignAuthProperties.ServiceConfig service, String requestPath) {
         FeignAuthProperties.AuthConfig auth = service.getAuth();
         if (auth.getClients() == null || auth.getClients().isEmpty()) {
@@ -85,6 +143,13 @@ public class TokenFetcher {
         throw new IllegalStateException("No OAuth2 client matched requestPath=" + requestPath + " for service=" + serviceName);
     }
 
+    /**
+     * Retrieves the service configuration for the given service name.
+     *
+     * @param serviceName the logical service name
+     * @return the {@link FeignAuthProperties.ServiceConfig}; never {@code null}
+     * @throws IllegalStateException if the service is not found in the configuration
+     */
     private FeignAuthProperties.ServiceConfig getServiceConfig(String serviceName) {
         Map<String, FeignAuthProperties.ServiceConfig> services = feignAuthProperties.getServices();
         FeignAuthProperties.ServiceConfig service = services == null ? null : services.get(serviceName);
@@ -94,6 +159,17 @@ public class TokenFetcher {
         return service;
     }
 
+    /**
+     * Returns the cached token if it is still valid, or fetches a fresh token otherwise.
+     *
+     * <p>A double-checked locking pattern is used to prevent redundant token requests
+     * when multiple threads detect an expired cache entry simultaneously.
+     *
+     * @param serviceName the logical service name (used as part of the cache key)
+     * @param service     the service configuration
+     * @param client      the selected OAuth2 client
+     * @return a valid, non-blank access token
+     */
     private String getCachedOrFetch(String serviceName, FeignAuthProperties.ServiceConfig service, FeignAuthProperties.ClientConfig client) {
         String cacheKey = serviceName + ":" + Objects.toString(client.getId(), "");
         TokenCacheEntry cached = tokenCache.get(cacheKey);
@@ -113,6 +189,17 @@ public class TokenFetcher {
         }
     }
 
+    /**
+     * Fetches a new token from the configured token endpoint, delegating to either
+     * {@link #fetchTokenByGet} or {@link #fetchTokenByPost} based on
+     * {@link FeignAuthProperties.AuthConfig#getMethod()}.
+     *
+     * @param service the service configuration
+     * @param client  the OAuth2 client credentials to use
+     * @return a populated {@link TokenCacheEntry}
+     * @throws IllegalStateException if the method is unsupported, or required fields
+     *                               ({@code tokenUrl}, {@code id}, {@code secret}) are missing
+     */
     private TokenCacheEntry fetchToken(FeignAuthProperties.ServiceConfig service, FeignAuthProperties.ClientConfig client) {
         FeignAuthProperties.AuthConfig auth = service.getAuth();
         if (StringUtils.isBlank(auth.getTokenUrl())) {
@@ -132,6 +219,13 @@ public class TokenFetcher {
         throw new IllegalStateException("Unsupported OAuth2 token method: " + auth.getMethod());
     }
 
+    /**
+     * Fetches a token using an HTTP GET request, appending credentials as query parameters.
+     *
+     * @param auth   the authentication configuration providing the token URL and field names
+     * @param client the OAuth2 client credentials
+     * @return a populated {@link TokenCacheEntry}
+     */
     private TokenCacheEntry fetchTokenByGet(FeignAuthProperties.AuthConfig auth, FeignAuthProperties.ClientConfig client) {
         FeignAuthProperties.RequestFields fields = auth.getRequestFields();
         String url = UriComponentsBuilder.fromHttpUrl(auth.getTokenUrl())
@@ -144,6 +238,13 @@ public class TokenFetcher {
         return parseTokenResponse(response, auth.getExpireAheadSeconds());
     }
 
+    /**
+     * Fetches a token using an HTTP POST request with a JSON body containing credentials.
+     *
+     * @param auth   the authentication configuration providing the token URL and field names
+     * @param client the OAuth2 client credentials
+     * @return a populated {@link TokenCacheEntry}
+     */
     private TokenCacheEntry fetchTokenByPost(FeignAuthProperties.AuthConfig auth, FeignAuthProperties.ClientConfig client) {
         FeignAuthProperties.RequestFields fields = auth.getRequestFields();
         Map<String, String> body = new HashMap<>();
@@ -158,6 +259,24 @@ public class TokenFetcher {
         return parseTokenResponse(response, auth.getExpireAheadSeconds());
     }
 
+    /**
+     * Parses the HTTP response from a token endpoint and builds a {@link TokenCacheEntry}.
+     *
+     * <p>The access token is looked up under the field names {@code access_token},
+     * {@code accessToken}, and {@code token} (first non-blank value wins).
+     *
+     * <p>The expiry duration is looked up under {@code expires_in}, {@code expiresIn},
+     * {@code expire_in}, and {@code expireIn}. If none is present, the default of
+     * {@value DEFAULT_EXPIRES_IN_SECONDS} seconds is used. The effective cache TTL is
+     * {@code (expiresIn - expireAheadSeconds)} seconds, clamped to a minimum of zero.
+     *
+     * @param response           the raw HTTP response from the token endpoint
+     * @param expireAheadSeconds number of seconds before actual expiry at which the
+     *                           cache entry should be considered stale
+     * @return a populated {@link TokenCacheEntry}
+     * @throws IllegalStateException if the response is not 2xx, the response body cannot
+     *                               be parsed, or no token field is found
+     */
     private TokenCacheEntry parseTokenResponse(ResponseEntity<String> response, long expireAheadSeconds) {
         if (response == null || !response.getStatusCode().is2xxSuccessful()) {
             int status = response == null ? -1 : response.getStatusCodeValue();
@@ -183,6 +302,14 @@ public class TokenFetcher {
         }
     }
 
+    /**
+     * Returns the length of the longest prefix in {@code prefixes} that matches the
+     * beginning of {@code requestPath}, or {@code 0} if no prefix matches.
+     *
+     * @param prefixes    an iterable of candidate path prefixes; may be {@code null}
+     * @param requestPath the normalized request path to test; may be blank
+     * @return the length of the best matching prefix, or {@code 0} if none matches
+     */
     private static int bestPrefixMatchLength(Iterable<String> prefixes, String requestPath) {
         if (prefixes == null || StringUtils.isBlank(requestPath)) {
             return 0;
@@ -197,6 +324,13 @@ public class TokenFetcher {
                 .orElse(0);
     }
 
+    /**
+     * Normalizes a request path by ensuring it starts with {@code /} and stripping
+     * any query string.
+     *
+     * @param path the raw path; may be {@code null} or blank
+     * @return the normalized path, or an empty string if {@code path} is blank
+     */
     private static String normalizePath(String path) {
         if (StringUtils.isBlank(path)) {
             return "";
@@ -204,6 +338,14 @@ public class TokenFetcher {
         return StringUtils.prependIfMissing(StringUtils.substringBefore(path, "?"), "/");
     }
 
+    /**
+     * Returns the text value of the first field in {@code root} whose name is in
+     * {@code fieldNames} and whose value is a non-blank text node.
+     *
+     * @param root       the JSON object to search
+     * @param fieldNames candidate field names to try in order
+     * @return the first matching non-blank text value, or {@code null} if none is found
+     */
     private static String firstText(JsonNode root, String... fieldNames) {
         return Arrays.stream(fieldNames)
                 .map(root::get)
@@ -215,6 +357,17 @@ public class TokenFetcher {
                 .orElse(null);
     }
 
+    /**
+     * Returns the first positive {@code long} value found in {@code root} under any of
+     * the given {@code fieldNames}, or {@code defaultValue} if none is found.
+     *
+     * <p>Both numeric and textual JSON node types are supported.
+     *
+     * @param root         the JSON object to search
+     * @param defaultValue the fallback value when no valid field is found
+     * @param fieldNames   candidate field names to try in order
+     * @return the first positive long value, or {@code defaultValue}
+     */
     private static long firstPositiveLong(JsonNode root, long defaultValue, String... fieldNames) {
         for (String name : fieldNames) {
             JsonNode node = root.get(name);
