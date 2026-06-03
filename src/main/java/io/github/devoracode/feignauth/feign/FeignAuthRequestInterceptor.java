@@ -48,6 +48,13 @@ public class FeignAuthRequestInterceptor implements RequestInterceptor {
      * <p>Emits one INFO line per request summarising the auth action taken, or a
      * WARN line when no service configuration matches the request.
      *
+     * <p>When {@code @FeignClient} is declared with a {@code path} attribute, OpenFeign
+     * folds that path prefix into {@code feignTarget().url()}. This method splits the
+     * target URL into its base (scheme + host + port) and any path prefix so that
+     * {@code base-url} in the configuration is always matched against the bare origin,
+     * and the full request path (target path prefix + method path) is used for
+     * {@code path-prefixes} matching.
+     *
      * @param template the current Feign {@link RequestTemplate}; may be {@code null}
      * @throws IllegalStateException if an API key service is missing its {@code value},
      *                               or if an OAuth2 token cannot be acquired
@@ -58,8 +65,30 @@ public class FeignAuthRequestInterceptor implements RequestInterceptor {
             return;
         }
 
-        String baseUrl = template.feignTarget().url();
-        String requestPath = normalizePath(template.path());
+        String targetUrl = template.feignTarget().url();
+
+        // When @FeignClient has a path attribute, OpenFeign appends it to feignTarget().url().
+        // Split into bare origin (scheme + host + port) and the embedded path prefix so that
+        // base-url matching always works against the plain origin.
+        String baseUrl;
+        String targetPathPrefix;
+        try {
+            java.net.URI uri = java.net.URI.create(targetUrl);
+            String path = StringUtils.defaultString(uri.getRawPath(), "");
+            // Reconstruct the bare origin without any path component
+            baseUrl = uri.getScheme() + "://" + uri.getAuthority();
+            targetPathPrefix = StringUtils.stripEnd(path, "/");
+        } catch (Exception e) {
+            // Fallback: treat the whole targetUrl as baseUrl (original behaviour)
+            baseUrl = targetUrl;
+            targetPathPrefix = "";
+        }
+
+        // Full request path = path prefix embedded in target URL + the per-method path
+        String methodPath   = normalizePath(template.path());
+        String requestPath  = StringUtils.isNotBlank(targetPathPrefix)
+                ? targetPathPrefix + methodPath
+                : methodPath;
 
         MatchedService matched = matchService(baseUrl, requestPath);
         if (matched == null) {
