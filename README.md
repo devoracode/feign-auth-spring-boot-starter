@@ -18,6 +18,7 @@
 - 支持多个服务共用同一个域名，按最长 `path-prefixes` 优先匹配。
 - 支持同域名下配置一个兜底服务，用于处理未命中特定路径的请求。
 - 支持 OAuth2 Token 缓存，并在过期前自动刷新。
+- 支持通过 `token-field` 配置从 Token 响应中提取 accessToken 的字段路径，支持 `data.accessToken` 这样的多级路径。
 - 内置 Spring Boot 配置元数据，IDE 可提供配置提示。
 
 ## 环境要求
@@ -139,6 +140,7 @@ feign:
 | `auth.token-url` | 是 | 无 | Token 获取地址。 |
 | `auth.method` | 否 | `post` | Token 请求方式，支持 `post` 和 `get`。 |
 | `auth.token-header` | 否 | `x-token` | 注入 Token 时使用的请求 Header 名称。 |
+| `auth.token-field` | 否 | 空 | Token 响应中 accessToken 的字段路径，支持 `data.accessToken` 这样的多级路径。不填时自动识别 `access_token`、`accessToken`、`token`。 |
 | `auth.expire-ahead-seconds` | 否 | `60` | Token 过期前多少秒刷新缓存。 |
 | `auth.request-fields.client-id` | 否 | `clientId` | Token 请求中 client id 的字段名。 |
 | `auth.request-fields.client-secret` | 否 | `clientSecret` | Token 请求中 client secret 的字段名。 |
@@ -166,11 +168,39 @@ feign:
 https://api.service.com/oauth/token?clientId=...&clientSecret=...&grantType=client_credentials
 ```
 
-Token 响应支持以下 Token 字段名：
+### Token 响应解析
+
+**Token 字段提取**
+
+默认情况下，starter 会按以下顺序自动识别 Token 字段名，取第一个非空值：
 
 - `access_token`
 - `accessToken`
 - `token`
+
+如果第三方服务返回的 Token 字段名不在上述列表中，或 Token 嵌套在 JSON 对象内部，可以通过 `auth.token-field` 指定提取路径。
+
+支持用 `.` 分隔的多级路径，例如响应结构为：
+
+```json
+{
+  "code": 0,
+  "data": {
+    "accessToken": "eyJhbGci..."
+  }
+}
+```
+
+则配置：
+
+```yaml
+auth:
+  token-field: data.accessToken
+```
+
+`token-field` 配置后，starter 只从该路径提取 Token，不再尝试内置字段名。
+
+**过期时间字段**
 
 过期时间支持以下字段名：
 
@@ -436,6 +466,7 @@ starter 内置 Spring Boot Configuration Metadata。IDE 可以对以下配置提
 - API Key 服务缺少 `value`。
 - Token 接口返回非 2xx 响应。
 - Token 响应中不存在 `access_token`、`accessToken` 或 `token`。
+- 配置了 `auth.token-field` 但该路径在 Token 响应中不存在或为空。
 
 ## 最佳实践
 

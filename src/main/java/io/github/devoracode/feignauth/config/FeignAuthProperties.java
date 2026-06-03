@@ -126,6 +126,21 @@ public class FeignAuthProperties {
         private long expireAheadSeconds = 60;
 
         /**
+         * JSON path expression used to extract the access token from the token response.
+         *
+         * <p>Supports dot-notation for nested fields, e.g. {@code data.accessToken} will
+         * navigate to {@code root → "data" → "accessToken"}.  Only simple dot-separated
+         * field names are supported; array indexing is not.
+         *
+         * <p>When this field is blank, the starter falls back to its built-in auto-detection
+         * logic, which tries {@code access_token}, {@code accessToken}, and {@code token}
+         * in that order.
+         *
+         * <p>Used only when {@link #type} is {@code oauth2}.
+         */
+        private String tokenField;
+
+        /**
          * Custom field names used when building the token request body or query parameters.
          */
         private RequestFields requestFields = new RequestFields();

@@ -18,8 +18,7 @@ class FeignClientConfigTest {
         properties.getServices().put("fallback", apiKeyService("https://api.service-d.com", "sk-fallback"));
         properties.getServices().put("orders", apiKeyService("https://api.service-d.com", "sk-orders", "/api/orders"));
 
-        FeignClientConfig.FeignAuthRequestInterceptor interceptor =
-                new FeignClientConfig.FeignAuthRequestInterceptor(properties, null);
+        FeignAuthRequestInterceptor interceptor = new FeignAuthRequestInterceptor(properties, null);
 
         assertThat(interceptor.matchService("https://api.service-d.com", "/api/orders/1").getServiceName())
                 .isEqualTo("orders");
@@ -34,8 +33,7 @@ class FeignClientConfigTest {
         properties.getServices().put("first", apiKeyService("https://api.service-d.com", "sk-first"));
         properties.getServices().put("second", apiKeyService("https://api.service-d.com", "sk-second"));
 
-        FeignClientConfig.FeignAuthRequestInterceptor interceptor =
-                new FeignClientConfig.FeignAuthRequestInterceptor(properties, null);
+        FeignAuthRequestInterceptor interceptor = new FeignAuthRequestInterceptor(properties, null);
 
         assertThatThrownBy(() -> interceptor.matchService("https://api.service-d.com", "/api/anything"))
                 .isInstanceOf(IllegalStateException.class)
@@ -49,8 +47,7 @@ class FeignClientConfigTest {
         properties.getServices().put("first", apiKeyService("https://api.service-d.com", "sk-first", "/api/orders"));
         properties.getServices().put("second", apiKeyService("https://api.service-d.com", "sk-second", "/api/orders"));
 
-        FeignClientConfig.FeignAuthRequestInterceptor interceptor =
-                new FeignClientConfig.FeignAuthRequestInterceptor(properties, null);
+        FeignAuthRequestInterceptor interceptor = new FeignAuthRequestInterceptor(properties, null);
 
         assertThatThrownBy(() -> interceptor.matchService("https://api.service-d.com", "/api/orders/1"))
                 .isInstanceOf(IllegalStateException.class)
