@@ -1,0 +1,140 @@
+{
+  "groups": [
+    {
+      "name": "feign",
+      "type": "io.github.devoracode.feignauth.config.FeignAuthProperties",
+      "sourceType": "io.github.devoracode.feignauth.config.FeignAuthProperties"
+    },
+    {
+      "name": "feign.services",
+      "type": "java.util.Map<java.lang.String,io.github.devoracode.feignauth.config.FeignAuthProperties$ServiceConfig>",
+      "sourceType": "io.github.devoracode.feignauth.config.FeignAuthProperties"
+    }
+  ],
+  "properties": [
+    {
+      "name": "feign.services",
+      "type": "java.util.Map<java.lang.String,io.github.devoracode.feignauth.config.FeignAuthProperties$ServiceConfig>",
+      "description": "Named third-party API service configurations keyed by service name."
+    },
+    {
+      "name": "feign.services.*.base-url",
+      "type": "java.lang.String",
+      "description": "Base URL used by the Feign client and matched by the auth interceptor."
+    },
+    {
+      "name": "feign.services.*.auth.type",
+      "type": "java.lang.String",
+      "description": "Authentication type for the service. Supported values are oauth2 and api-key."
+    },
+    {
+      "name": "feign.services.*.auth.token-url",
+      "type": "java.lang.String",
+      "description": "OAuth2 token endpoint URL."
+    },
+    {
+      "name": "feign.services.*.auth.method",
+      "type": "java.lang.String",
+      "description": "HTTP method used to request OAuth2 tokens. Supported values are post and get.",
+      "defaultValue": "post"
+    },
+    {
+      "name": "feign.services.*.auth.token-header",
+      "type": "java.lang.String",
+      "description": "Header name used to inject OAuth2 access tokens.",
+      "defaultValue": "x-token"
+    },
+    {
+      "name": "feign.services.*.auth.header-name",
+      "type": "java.lang.String",
+      "description": "Header name used to inject a fixed API key.",
+      "defaultValue": "Authorization"
+    },
+    {
+      "name": "feign.services.*.auth.value",
+      "type": "java.lang.String",
+      "description": "Fixed API key value used when auth.type is api-key."
+    },
+    {
+      "name": "feign.services.*.auth.expire-ahead-seconds",
+      "type": "java.lang.Long",
+      "description": "Seconds before token expiry when a cached OAuth2 token should be refreshed.",
+      "defaultValue": 60
+    },
+    {
+      "name": "feign.services.*.auth.request-fields.client-id",
+      "type": "java.lang.String",
+      "description": "OAuth2 request field name for client id.",
+      "defaultValue": "clientId"
+    },
+    {
+      "name": "feign.services.*.auth.request-fields.client-secret",
+      "type": "java.lang.String",
+      "description": "OAuth2 request field name for client secret.",
+      "defaultValue": "clientSecret"
+    },
+    {
+      "name": "feign.services.*.auth.request-fields.grant-type",
+      "type": "java.lang.String",
+      "description": "OAuth2 request field name for grant type.",
+      "defaultValue": "grantType"
+    },
+    {
+      "name": "feign.services.*.auth.clients",
+      "type": "java.util.List<io.github.devoracode.feignauth.config.FeignAuthProperties$ClientConfig>",
+      "description": "OAuth2 client credentials and optional path prefix routes."
+    },
+    {
+      "name": "feign.services.*.auth.clients[].id",
+      "type": "java.lang.String",
+      "description": "OAuth2 client id."
+    },
+    {
+      "name": "feign.services.*.auth.clients[].secret",
+      "type": "java.lang.String",
+      "description": "OAuth2 client secret."
+    },
+    {
+      "name": "feign.services.*.auth.clients[].grant-type",
+      "type": "java.lang.String",
+      "description": "OAuth2 grant type.",
+      "defaultValue": "client_credentials"
+    },
+    {
+      "name": "feign.services.*.auth.clients[].path-prefixes",
+      "type": "java.util.List<java.lang.String>",
+      "description": "Request path prefixes routed to this OAuth2 client. Omit to define the default client for the service."
+    },
+    {
+      "name": "feign.services.*.auth.path-prefixes",
+      "type": "java.util.List<java.lang.String>",
+      "description": "Request path prefixes routed to this API key service. Omit to define the fallback API key service for the same base URL."
+    }
+  ],
+  "hints": [
+    {
+      "name": "feign.services.*.auth.type",
+      "values": [
+        {
+          "value": "oauth2",
+          "description": "Fetch and cache tokens from an OAuth2 token endpoint."
+        },
+        {
+          "value": "api-key",
+          "description": "Inject a fixed API key value into the configured header."
+        }
+      ]
+    },
+    {
+      "name": "feign.services.*.auth.method",
+      "values": [
+        {
+          "value": "post"
+        },
+        {
+          "value": "get"
+        }
+      ]
+    }
+  ]
+}
