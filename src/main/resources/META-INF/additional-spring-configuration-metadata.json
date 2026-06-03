@@ -62,6 +62,11 @@
       "defaultValue": 60
     },
     {
+      "name": "feign.services.*.auth.token-field",
+      "type": "java.lang.String",
+      "description": "Dot-separated JSON path to extract the access token from the token response, e.g. data.accessToken. When blank, the built-in auto-detection (access_token / accessToken / token) is used."
+    },
+    {
       "name": "feign.services.*.auth.request-fields.client-id",
       "type": "java.lang.String",
       "description": "OAuth2 request field name for client id.",

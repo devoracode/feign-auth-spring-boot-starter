@@ -164,6 +164,7 @@ public class TokenFetcher {
      *
      * <p>A double-checked locking pattern is used to prevent redundant token requests
      * when multiple threads detect an expired cache entry simultaneously.
+     * An INFO line is logged only when a new token is actually fetched from the endpoint.
      *
      * @param serviceName the logical service name (used as part of the cache key)
      * @param service     the service configuration
@@ -183,8 +184,12 @@ public class TokenFetcher {
                 return cachedAgain.getAccessToken();
             }
 
+            log.info("FeignAuth [oauth2] fetching new token for service='{}', clientId='{}'",
+                    serviceName, client.getId());
             TokenCacheEntry refreshed = fetchToken(service, client);
             tokenCache.put(cacheKey, refreshed);
+            log.info("FeignAuth [oauth2] token cached for service='{}', clientId='{}', expireAt={}",
+                    serviceName, client.getId(), refreshed.getExpireAt());
             return refreshed.getAccessToken();
         }
     }
@@ -235,7 +240,7 @@ public class TokenFetcher {
                 .toUriString();
 
         ResponseEntity<String> response = restTemplate.getForEntity(url, String.class);
-        return parseTokenResponse(response, auth.getExpireAheadSeconds());
+        return parseTokenResponse(response, auth.getExpireAheadSeconds(), auth.getTokenField());
     }
 
     /**
@@ -256,14 +261,19 @@ public class TokenFetcher {
         headers.setContentType(MediaType.APPLICATION_JSON);
 
         ResponseEntity<String> response = restTemplate.postForEntity(auth.getTokenUrl(), new HttpEntity<>(body, headers), String.class);
-        return parseTokenResponse(response, auth.getExpireAheadSeconds());
+        return parseTokenResponse(response, auth.getExpireAheadSeconds(), auth.getTokenField());
     }
 
     /**
      * Parses the HTTP response from a token endpoint and builds a {@link TokenCacheEntry}.
      *
-     * <p>The access token is looked up under the field names {@code access_token},
-     * {@code accessToken}, and {@code token} (first non-blank value wins).
+     * <p>Token extraction strategy (in priority order):
+     * <ol>
+     *   <li>If {@code tokenField} is non-blank, navigate the dot-separated path
+     *       (e.g. {@code data.accessToken}) and read the value at that node.</li>
+     *   <li>Otherwise, try the built-in field names {@code access_token},
+     *       {@code accessToken}, and {@code token} in that order.</li>
+     * </ol>
      *
      * <p>The expiry duration is looked up under {@code expires_in}, {@code expiresIn},
      * {@code expire_in}, and {@code expireIn}. If none is present, the default of
@@ -273,20 +283,31 @@ public class TokenFetcher {
      * @param response           the raw HTTP response from the token endpoint
      * @param expireAheadSeconds number of seconds before actual expiry at which the
      *                           cache entry should be considered stale
+     * @param tokenField         dot-separated JSON path for the token field, or {@code null}/blank
+     *                           to use built-in auto-detection
      * @return a populated {@link TokenCacheEntry}
      * @throws IllegalStateException if the response is not 2xx, the response body cannot
      *                               be parsed, or no token field is found
      */
-    private TokenCacheEntry parseTokenResponse(ResponseEntity<String> response, long expireAheadSeconds) {
+    private TokenCacheEntry parseTokenResponse(ResponseEntity<String> response, long expireAheadSeconds, String tokenField) {
         if (response == null || !response.getStatusCode().is2xxSuccessful()) {
             int status = response == null ? -1 : response.getStatusCodeValue();
             throw new IllegalStateException("Token request failed: " + status);
         }
         try {
             JsonNode root = objectMapper.readTree(response.getBody() == null ? "" : response.getBody());
-            String token = firstText(root, "access_token", "accessToken", "token");
-            if (StringUtils.isBlank(token)) {
-                throw new IllegalStateException("Token field not found in response");
+
+            String token;
+            if (StringUtils.isNotBlank(tokenField)) {
+                token = resolveTokenByPath(root, tokenField.trim());
+                if (StringUtils.isBlank(token)) {
+                    throw new IllegalStateException("Token field '" + tokenField + "' not found or blank in response");
+                }
+            } else {
+                token = firstText(root, "access_token", "accessToken", "token");
+                if (StringUtils.isBlank(token)) {
+                    throw new IllegalStateException("Token field not found in response");
+                }
             }
 
             long expiresIn = firstPositiveLong(root, DEFAULT_EXPIRES_IN_SECONDS, "expires_in", "expiresIn", "expire_in", "expireIn");
@@ -300,6 +321,35 @@ public class TokenFetcher {
             log.error("Parse token response failed", e);
             throw new IllegalStateException("Parse token response failed: " + e.getMessage(), e);
         }
+    }
+
+    /**
+     * Navigates a dot-separated JSON path (e.g. {@code data.accessToken}) starting from
+     * {@code root} and returns the text value of the target node.
+     *
+     * <p>Each segment of the path must be a plain field name. Array indexing is not
+     * supported. If any intermediate node is missing or not an object, {@code null}
+     * is returned.
+     *
+     * @param root      the root JSON node to start from
+     * @param tokenField dot-separated field path, e.g. {@code data.accessToken}
+     * @return the text value at the resolved node, or {@code null} if the path cannot
+     *         be resolved or the final node is not a non-blank text value
+     */
+    private static String resolveTokenByPath(JsonNode root, String tokenField) {
+        String[] segments = tokenField.split("\\.");
+        JsonNode node = root;
+        for (String segment : segments) {
+            if (node == null || !node.isObject()) {
+                return null;
+            }
+            node = node.get(segment);
+        }
+        if (node == null || !node.isValueNode()) {
+            return null;
+        }
+        String value = node.asText();
+        return StringUtils.isBlank(value) ? null : value;
     }
 
     /**
