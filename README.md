@@ -36,7 +36,7 @@
 <dependency>
     <groupId>io.github.devoracode</groupId>
     <artifactId>feign-auth-spring-boot-starter</artifactId>
-    <version>1.0.0</version>
+    <version>1.2.0</version>
 </dependency>
 ```
 
@@ -68,13 +68,14 @@ feign:
         method: post
         token-header: x-token
         request-fields:
-          client-id: clientId
-          client-secret: clientSecret
           grant-type: grantType
         clients:
           - id: order-client
             secret: order-secret
+            grant-type: client_credentials
 ```
+
+`request-fields` 中只有 `grant-type` 需要显式配置，`client-id` 和 `client-secret` 不配置时会自动使用默认字段名 `clientId` 和 `clientSecret`。如果目标服务不需要 `grant_type` 参数，可以完全省略 `request-fields` 和 `clients[].grant-type`。
 
 然后在 FeignClient 上指定 `configuration = FeignClientConfig.class`：
 
@@ -142,17 +143,24 @@ feign:
 | `auth.token-header` | 否 | `x-token` | 注入 Token 时使用的请求 Header 名称。 |
 | `auth.token-field` | 否 | 空 | Token 响应中 accessToken 的字段路径，支持 `data.accessToken` 这样的多级路径。不填时自动识别 `access_token`、`accessToken`、`token`。 |
 | `auth.expire-ahead-seconds` | 否 | `60` | Token 过期前多少秒刷新缓存。 |
-| `auth.request-fields.client-id` | 否 | `clientId` | Token 请求中 client id 的字段名。 |
-| `auth.request-fields.client-secret` | 否 | `clientSecret` | Token 请求中 client secret 的字段名。 |
-| `auth.request-fields.grant-type` | 否 | `grantType` | Token 请求中 grant type 的字段名。 |
+| `auth.request-fields.client-id` | 否 | `clientId` | Token 请求中 client id 的字段名。不配置时使用默认值 `clientId`。 |
+| `auth.request-fields.client-secret` | 否 | `clientSecret` | Token 请求中 client secret 的字段名。不配置时使用默认值 `clientSecret`。 |
+| `auth.request-fields.grant-type` | 否 | 空 | Token 请求中 grant type 的字段名。**不配置时 grant type 参数不会出现在请求中**，适用于不需要该参数的服务。 |
 | `auth.clients[].id` | 是 | 无 | OAuth2 client id。 |
 | `auth.clients[].secret` | 是 | 无 | OAuth2 client secret。 |
-| `auth.clients[].grant-type` | 否 | `client_credentials` | OAuth2 grant type 字段值。 |
+| `auth.clients[].grant-type` | 否 | 空 | OAuth2 grant type 字段值。**不配置时 grant type 参数不会出现在请求中**。仅在同时配置了 `auth.request-fields.grant-type` 时生效。 |
 | `auth.clients[].path-prefixes` | 否 | 空 | 当前 client 匹配的请求路径前缀。不配置表示该 client 是默认 client。 |
 
 ### Token 请求行为
 
-当 `method: post` 时，starter 会发送 JSON 请求体：
+**请求参数构建**
+
+starter 根据配置动态构建 Token 请求参数：
+
+- `client-id`、`client-secret`：字段名不配置时默认使用 `clientId` 和 `clientSecret`。
+- `grant-type`：**只有同时配置了 `auth.request-fields.grant-type`（字段名）和 `auth.clients[].grant-type`（字段值）时才会出现在请求中**。不配置时该参数完全不发送，适用于不需要 grant type 参数的第三方服务。
+
+当 `method: post` 时，starter 会发送 JSON 请求体。假设配置了完整的 request-fields 和 grant-type：
 
 ```json
 {
@@ -162,10 +170,40 @@ feign:
 }
 ```
 
+如果 `auth.request-fields.grant-type` 或 `auth.clients[].grant-type` 任一未配置，则请求体中不会包含 grant type 参数。
+
 当 `method: get` 时，starter 会将相同字段拼接为 query 参数：
 
 ```text
 https://api.service.com/oauth/token?clientId=...&clientSecret=...&grantType=client_credentials
+```
+
+**自定义字段名示例**
+
+对于使用 `appId`/`appSecret` 而非标准 `clientId`/`clientSecret` 的服务：
+
+```yaml
+auth:
+  request-fields:
+    client-id: appId
+    client-secret: appSecret
+    grant-type: grantType
+  clients:
+    - id: my-app-id
+      secret: my-app-secret
+      grant-type: client_credentials
+```
+
+对于不需要 `grant_type` 参数的服务，完全不配置 `request-fields.grant-type` 和 `clients[].grant-type`：
+
+```yaml
+auth:
+  request-fields:
+    client-id: appId
+    client-secret: appSecret
+  clients:
+    - id: my-app-id
+      secret: my-app-secret
 ```
 
 ### Token 响应解析
@@ -429,7 +467,7 @@ starter 会自动注册以下组件：
 
 - `FeignAuthAutoConfiguration`
 - `FeignAuthProperties`
-- `RestTemplate`：当业务项目中不存在自定义 `RestTemplate` bean 时注册。
+- `feignAuthRestTemplate`：starter 内部专用的 `RestTemplate` bean，始终独立注册，与业务项目中自定义的 `RestTemplate` bean 完全隔离，互不影响。
 - `ObjectMapper`：当业务项目中不存在自定义 `ObjectMapper` bean 时注册。
 - `TokenFetcher`：当业务项目中不存在自定义 `TokenFetcher` bean 时注册。
 

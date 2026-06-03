@@ -69,20 +69,17 @@
     {
       "name": "feign.services.*.auth.request-fields.client-id",
       "type": "java.lang.String",
-      "description": "OAuth2 request field name for client id.",
-      "defaultValue": "clientId"
+      "description": "OAuth2 request field name for client id. When not set, defaults to clientId."
     },
     {
       "name": "feign.services.*.auth.request-fields.client-secret",
       "type": "java.lang.String",
-      "description": "OAuth2 request field name for client secret.",
-      "defaultValue": "clientSecret"
+      "description": "OAuth2 request field name for client secret. When not set, defaults to clientSecret."
     },
     {
       "name": "feign.services.*.auth.request-fields.grant-type",
       "type": "java.lang.String",
-      "description": "OAuth2 request field name for grant type.",
-      "defaultValue": "grantType"
+      "description": "OAuth2 request field name for grant type. When not set, the grant-type parameter is omitted from the token request."
     },
     {
       "name": "feign.services.*.auth.clients",
@@ -102,8 +99,7 @@
     {
       "name": "feign.services.*.auth.clients[].grant-type",
       "type": "java.lang.String",
-      "description": "OAuth2 grant type.",
-      "defaultValue": "client_credentials"
+      "description": "OAuth2 grant type value. When not set, the grant-type parameter is omitted from the token request."
     },
     {
       "name": "feign.services.*.auth.clients[].path-prefixes",
