@@ -1,0 +1,109 @@
+# -----------------------------------------------------------------------------
+# feign multi-api 示例配置
+# 结构风格：
+# - services: 按服务名组织配置
+# - auth: 统一放鉴权方式与凭证信息
+# - OAuth2 多 Client 场景: 路由放在 auth.clients[].path-prefixes, 同一个域名,允许多个 path-prefixes Client,但只允许一个 Default Client（即未配置 path-prefixes）
+# - API Key 无多 Client 场景: 路由放在 auth.path-prefixes
+# -----------------------------------------------------------------------------
+
+feign:
+  services:
+    measure:
+      base-url: https://api.service-a.com
+      auth:
+        type: oauth2
+        token-url: https://api.service-a.com/oauth/token
+        method: post
+        token-header: x-token
+        request-fields:
+          client-id: clientId
+          client-secret: clientSecret
+          grant-type: grantType
+        clients:
+          - id: xxxxxxeeeee
+            secret: secret-ertyertwh8243056867967875203947234
+            path-prefixes:
+              - /api/measure/event
+              - /api/measure/event2
+
+          - id: sdgerhertgsfgseredfs
+            secret: secret-ertyertwh82423452375203947234
+            path-prefixes:
+              - /api/measure/telemetry
+          - id: sdgerhertgsfgseredfs
+            secret: secret-ertyertwh82423452375203947234
+
+    measure-2:
+      base-url: https://api.service-a.com
+      auth:
+        type: oauth2
+        token-url: https://api.service-a.com/oauth/token
+        method: post
+        token-header: x-token
+        request-fields:
+          client-id: clientId
+          client-secret: clientSecret
+          grant-type: grantType
+        clients:
+          - id: 1234456745643
+            secret: secret-ertyertwh56345233503947234
+            path-prefixes:
+              - /api/measure/analy
+
+    psr:
+      base-url: https://api.service-p.com
+      auth:
+        type: oauth2
+        token-url: https://api.service-p.com/oauth/accessToken
+        method: get
+        clients:
+          - id: client-order
+            secret: secret-order
+            path-prefixes:
+              - /api/orders
+
+          - id: client-shipment
+            secret: secret-shipment
+            path-prefixes:
+              - /api/shipments
+
+          - id: client-default
+            secret: secret-default
+
+    ast:
+      base-url: https://api.service-b.com
+      auth:
+        type: oauth2
+        token-url: https://api.service-b.com/oauth/token
+        request-fields:
+          client-id: appId
+          client-secret: appSecret
+        clients:
+          - id: oiwerutwlersjgl23423klsdgfjlsk
+            secret: secret-ertyertwh8243075203947234
+
+    # ── cons：固定 API Key，同域名 api.service-d.com，path-prefixes 优先匹配 ──
+    cons:
+      base-url: https://api.service-d.com
+      auth:
+        type: api-key
+        header-name: Authorization
+        value: sk-xxxxxxxxxxxxxxxx
+        path-prefixes:
+          - /api/orders
+
+    # ── cons2：固定 API Key，兜底匹配 api.service-d.com 所有未被 cons 命中的路径 ──
+    cons2:
+      base-url: https://api.service-d.com
+      auth:
+        type: api-key
+        header-name: Authorization
+        value: sk-standalone-yyyyyyyy
+
+    cons3:
+      base-url: https://api.service-e.com
+      auth:
+        type: api-key
+        header-name: Authorization
+        value: sk-zzzzzzzz
