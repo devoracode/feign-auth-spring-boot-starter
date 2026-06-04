@@ -3,6 +3,7 @@ package io.github.devoracode.feignauth.feign;
 import feign.RequestInterceptor;
 import feign.RequestTemplate;
 import io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties;
+import io.github.devoracode.feignauth.exception.FeignAuthConfigurationException;
 import io.github.devoracode.feignauth.oauth2.TokenFetcher;
 import io.github.devoracode.feignauth.support.PathUtils;
 import org.apache.commons.logging.Log;
@@ -97,7 +98,8 @@ public class FeignAuthRequestInterceptor implements RequestInterceptor {
 	private void applyApiKey(RequestTemplate template, ResolvedService resolved, FeignAuthProperties.Auth auth,
 			String requestPath) {
 		if (!StringUtils.hasText(auth.getValue())) {
-			throw new IllegalStateException("API key value is required for service: " + resolved.getServiceName());
+			throw new FeignAuthConfigurationException(
+					"API key value is required for service: " + resolved.getServiceName());
 		}
 		String headerName = auth.resolveHeaderName();
 		template.header(headerName, auth.getValue());

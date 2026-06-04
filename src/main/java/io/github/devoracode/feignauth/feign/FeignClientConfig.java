@@ -1,10 +1,16 @@
 package io.github.devoracode.feignauth.feign;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import feign.Retryer;
 import feign.RequestInterceptor;
+import feign.codec.ErrorDecoder;
 import io.github.devoracode.feignauth.oauth2.TokenFetcher;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.cloud.openfeign.FeignBuilderCustomizer;
 import org.springframework.util.Assert;
+
+import java.util.concurrent.TimeUnit;
 
 /**
  * Feign client configuration that registers the authentication request interceptor.
@@ -31,16 +37,37 @@ public class FeignClientConfig {
 
 	private final TokenFetcher tokenFetcher;
 
-	public FeignClientConfig(ServiceMatcher serviceMatcher, TokenFetcher tokenFetcher) {
+	private final ObjectMapper objectMapper;
+
+	public FeignClientConfig(ServiceMatcher serviceMatcher, TokenFetcher tokenFetcher, ObjectMapper objectMapper) {
 		Assert.notNull(serviceMatcher, "serviceMatcher must not be null");
 		Assert.notNull(tokenFetcher, "tokenFetcher must not be null");
+		Assert.notNull(objectMapper, "objectMapper must not be null");
 		this.serviceMatcher = serviceMatcher;
 		this.tokenFetcher = tokenFetcher;
+		this.objectMapper = objectMapper;
 	}
 
 	@Bean
 	public RequestInterceptor feignAuthRequestInterceptor() {
 		return new FeignAuthRequestInterceptor(this.serviceMatcher, this.tokenFetcher);
+	}
+
+	@Bean
+	public ErrorDecoder feignAuthErrorDecoder() {
+		return new FeignAuthErrorDecoder(this.serviceMatcher, this.tokenFetcher);
+	}
+
+	@Bean
+	public FeignBuilderCustomizer feignAuthResponseInterceptorCustomizer() {
+		FeignAuthResponseInterceptor responseInterceptor = new FeignAuthResponseInterceptor(this.serviceMatcher,
+				this.tokenFetcher, this.objectMapper);
+		return builder -> builder.responseInterceptor(responseInterceptor);
+	}
+
+	@Bean
+	public Retryer feignAuthRetryer() {
+		return new Retryer.Default(100, TimeUnit.SECONDS.toMillis(1), 2);
 	}
 
 }
