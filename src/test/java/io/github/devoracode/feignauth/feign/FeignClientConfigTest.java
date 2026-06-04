@@ -1,6 +1,7 @@
 package io.github.devoracode.feignauth.feign;
 
 import io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties;
+import io.github.devoracode.feignauth.exception.FeignAuthConfigurationException;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
@@ -36,7 +37,7 @@ class FeignClientConfigTest {
 		FeignAuthRequestInterceptor interceptor = new FeignAuthRequestInterceptor(new ServiceMatcher(properties), null);
 
 		assertThatThrownBy(() -> interceptor.matchService("https://api.service-d.com", "/api/anything"))
-				.isInstanceOf(IllegalStateException.class)
+				.isInstanceOf(FeignAuthConfigurationException.class)
 				.hasMessageContaining("Multiple fallback services");
 	}
 
@@ -50,7 +51,7 @@ class FeignClientConfigTest {
 		FeignAuthRequestInterceptor interceptor = new FeignAuthRequestInterceptor(new ServiceMatcher(properties), null);
 
 		assertThatThrownBy(() -> interceptor.matchService("https://api.service-d.com", "/api/orders/1"))
-				.isInstanceOf(IllegalStateException.class)
+				.isInstanceOf(FeignAuthConfigurationException.class)
 				.hasMessageContaining("Multiple services matched");
 	}
 

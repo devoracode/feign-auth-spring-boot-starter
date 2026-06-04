@@ -2,6 +2,7 @@ package io.github.devoracode.feignauth.oauth2;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties;
+import io.github.devoracode.feignauth.exception.FeignAuthConfigurationException;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.springframework.util.Assert;
@@ -61,11 +62,34 @@ public class TokenFetcher {
 		FeignAuthProperties.Service service = getRequiredService(serviceName);
 		FeignAuthProperties.Auth auth = service.getAuth();
 		if (auth == null || !auth.isOAuth2()) {
-			throw new IllegalStateException("Service '" + serviceName + "' is not OAuth2 mode");
+			throw new FeignAuthConfigurationException("Service '" + serviceName + "' is not OAuth2 mode");
 		}
 
 		FeignAuthProperties.Client client = resolveClient(serviceName, service, requestPath);
 		return getCachedOrFetch(serviceName, service, client);
+	}
+
+	/**
+	 * Invalidates the cached OAuth2 access token selected for the given request path.
+	 * @param serviceName the logical service name
+	 * @param requestPath the normalized request path
+	 * @return {@code true} when a cached token was removed
+	 */
+	public boolean invalidateToken(String serviceName, String requestPath) {
+		FeignAuthProperties.Service service = getRequiredService(serviceName);
+		FeignAuthProperties.Auth auth = service.getAuth();
+		if (auth == null || !auth.isOAuth2()) {
+			return false;
+		}
+
+		FeignAuthProperties.Client client = resolveClient(serviceName, service, requestPath);
+		String cacheKey = buildCacheKey(serviceName, client);
+		OAuth2AccessToken removed = this.tokenCache.remove(cacheKey);
+		if (removed != null && logger.isInfoEnabled()) {
+			logger.info("FeignAuth [oauth2] token evicted for service='" + serviceName + "', clientId='"
+					+ client.getId() + "'");
+		}
+		return removed != null;
 	}
 
 	/**
@@ -84,14 +108,14 @@ public class TokenFetcher {
 		Map<String, FeignAuthProperties.Service> services = this.properties.getServices();
 		FeignAuthProperties.Service service = services == null ? null : services.get(serviceName);
 		if (service == null) {
-			throw new IllegalStateException("Service config not found: " + serviceName);
+			throw new FeignAuthConfigurationException("Service config not found: " + serviceName);
 		}
 		return service;
 	}
 
 	private String getCachedOrFetch(String serviceName, FeignAuthProperties.Service service,
 			FeignAuthProperties.Client client) {
-		String cacheKey = serviceName + ":" + Objects.toString(client.getId(), "");
+		String cacheKey = buildCacheKey(serviceName, client);
 		OAuth2AccessToken cached = this.tokenCache.get(cacheKey);
 		if (cached != null && !cached.isExpired() && StringUtils.hasText(cached.getAccessToken())) {
 			return cached.getAccessToken();
@@ -116,6 +140,10 @@ public class TokenFetcher {
 			}
 			return refreshed.getAccessToken();
 		}
+	}
+
+	private static String buildCacheKey(String serviceName, FeignAuthProperties.Client client) {
+		return serviceName + ":" + Objects.toString(client.getId(), "");
 	}
 
 }

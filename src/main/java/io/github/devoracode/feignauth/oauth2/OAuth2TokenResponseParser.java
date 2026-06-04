@@ -2,7 +2,7 @@ package io.github.devoracode.feignauth.oauth2;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.http.HttpStatus;
+import io.github.devoracode.feignauth.exception.FeignAuthTokenException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
@@ -50,7 +50,7 @@ public class OAuth2TokenResponseParser {
 			Long configuredExpiresInSeconds) {
 		if (response == null || !response.getStatusCode().is2xxSuccessful()) {
 			int status = response == null ? -1 : response.getStatusCodeValue();
-			throw new IllegalStateException("Token request failed: " + status);
+			throw new FeignAuthTokenException("Token request failed: " + status);
 		}
 		try {
 			JsonNode root = this.objectMapper.readTree(response.getBody() == null ? "" : response.getBody());
@@ -63,11 +63,11 @@ public class OAuth2TokenResponseParser {
 			accessToken.setExpireAt(System.currentTimeMillis() + refreshIn * 1000L);
 			return accessToken;
 		}
-		catch (IllegalStateException ex) {
+		catch (FeignAuthTokenException ex) {
 			throw ex;
 		}
 		catch (Exception ex) {
-			throw new IllegalStateException("Parse token response failed: " + ex.getMessage(), ex);
+			throw new FeignAuthTokenException("Parse token response failed: " + ex.getMessage(), ex);
 		}
 	}
 
@@ -150,13 +150,14 @@ public class OAuth2TokenResponseParser {
 		if (StringUtils.hasText(tokenField)) {
 			String token = resolveTokenByPath(root, tokenField.trim());
 			if (!StringUtils.hasText(token)) {
-				throw new IllegalStateException("Token field '" + tokenField + "' not found or blank in response");
+				throw new FeignAuthTokenException(
+						"Token field '" + tokenField + "' not found or blank in response");
 			}
 			return token;
 		}
 		String token = firstText(root, "access_token", "accessToken", "token");
 		if (!StringUtils.hasText(token)) {
-			throw new IllegalStateException("Token field not found in response");
+			throw new FeignAuthTokenException("Token field not found in response");
 		}
 		return token;
 	}

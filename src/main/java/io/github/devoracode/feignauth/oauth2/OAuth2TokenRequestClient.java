@@ -1,6 +1,8 @@
 package io.github.devoracode.feignauth.oauth2;
 
 import io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties;
+import io.github.devoracode.feignauth.exception.FeignAuthConfigurationException;
+import io.github.devoracode.feignauth.exception.FeignAuthTokenException;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -41,10 +43,11 @@ public class OAuth2TokenRequestClient {
 	public OAuth2AccessToken requestToken(FeignAuthProperties.Service service, FeignAuthProperties.Client client) {
 		FeignAuthProperties.Auth auth = service.getAuth();
 		if (!StringUtils.hasText(auth.getTokenUrl())) {
-			throw new IllegalStateException("token-url is required for OAuth2 service baseUrl=" + service.getBaseUrl());
+			throw new FeignAuthConfigurationException(
+					"token-url is required for OAuth2 service baseUrl=" + service.getBaseUrl());
 		}
 		if (!StringUtils.hasText(client.getId()) || !StringUtils.hasText(client.getSecret())) {
-			throw new IllegalStateException(
+			throw new FeignAuthConfigurationException(
 					"OAuth2 client id and secret are required for service baseUrl=" + service.getBaseUrl());
 		}
 
@@ -55,7 +58,7 @@ public class OAuth2TokenRequestClient {
 		if ("post".equals(method)) {
 			return requestTokenByPost(auth, client);
 		}
-		throw new IllegalStateException("Unsupported OAuth2 token method: " + auth.getMethod());
+		throw new FeignAuthConfigurationException("Unsupported OAuth2 token method: " + auth.getMethod());
 	}
 
 	private OAuth2AccessToken requestTokenByGet(FeignAuthProperties.Auth auth, FeignAuthProperties.Client client) {

@@ -1,6 +1,7 @@
 package io.github.devoracode.feignauth.oauth2;
 
 import io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties;
+import io.github.devoracode.feignauth.exception.FeignAuthConfigurationException;
 import io.github.devoracode.feignauth.support.PathUtils;
 import org.springframework.util.Assert;
 
@@ -24,7 +25,7 @@ public class OAuth2ClientMatcher {
 		Assert.notNull(service, "service must not be null");
 		FeignAuthProperties.Auth auth = service.getAuth();
 		if (auth.getClients() == null || auth.getClients().isEmpty()) {
-			throw new IllegalStateException("No OAuth2 clients configured for service: " + serviceName);
+			throw new FeignAuthConfigurationException("No OAuth2 clients configured for service: " + serviceName);
 		}
 
 		String path = PathUtils.normalizePath(requestPath);
@@ -40,7 +41,7 @@ public class OAuth2ClientMatcher {
 				bestMatchLength = matchLength;
 			}
 			else if (matchLength > 0 && matchLength == bestMatchLength) {
-				throw new IllegalStateException("Multiple OAuth2 clients matched requestPath=" + requestPath
+				throw new FeignAuthConfigurationException("Multiple OAuth2 clients matched requestPath=" + requestPath
 						+ " for service=" + serviceName);
 			}
 		}
@@ -54,8 +55,8 @@ public class OAuth2ClientMatcher {
 				continue;
 			}
 			if (defaultClient != null) {
-				throw new IllegalStateException("Multiple default OAuth2 clients configured for service: "
-						+ serviceName);
+				throw new FeignAuthConfigurationException(
+						"Multiple default OAuth2 clients configured for service: " + serviceName);
 			}
 			defaultClient = client;
 		}
@@ -63,8 +64,8 @@ public class OAuth2ClientMatcher {
 			return defaultClient;
 		}
 
-		throw new IllegalStateException("No OAuth2 client matched requestPath=" + requestPath + " for service="
-				+ serviceName);
+		throw new FeignAuthConfigurationException("No OAuth2 client matched requestPath=" + requestPath
+				+ " for service=" + serviceName);
 	}
 
 }

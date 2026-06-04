@@ -1,6 +1,7 @@
 package io.github.devoracode.feignauth.feign;
 
 import io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties;
+import io.github.devoracode.feignauth.exception.FeignAuthConfigurationException;
 import io.github.devoracode.feignauth.support.PathUtils;
 import org.springframework.util.Assert;
 
@@ -59,7 +60,7 @@ public class ServiceMatcher {
 			prefixMatches.sort(Comparator.comparingInt(PrefixMatch::getMatchLength).reversed());
 			PrefixMatch best = prefixMatches.get(0);
 			if (prefixMatches.size() > 1 && prefixMatches.get(1).getMatchLength() == best.getMatchLength()) {
-				throw new IllegalStateException(
+				throw new FeignAuthConfigurationException(
 						"Multiple services matched requestPath=" + requestPath + " for baseUrl=" + baseUrl);
 			}
 			return best.getService();
@@ -77,7 +78,7 @@ public class ServiceMatcher {
 			return null;
 		}
 		if (fallbackCandidates.size() > 1) {
-			throw new IllegalStateException("Multiple fallback services configured for baseUrl=" + baseUrl);
+			throw new FeignAuthConfigurationException("Multiple fallback services configured for baseUrl=" + baseUrl);
 		}
 		return fallbackCandidates.get(0);
 	}

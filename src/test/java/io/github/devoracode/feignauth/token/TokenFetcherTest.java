@@ -1,7 +1,9 @@
-package io.github.devoracode.feignauth.oauth2;
+package io.github.devoracode.feignauth.token;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties;
+import io.github.devoracode.feignauth.exception.FeignAuthConfigurationException;
+import io.github.devoracode.feignauth.oauth2.TokenFetcher;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.client.RestTemplate;
 
@@ -35,7 +37,7 @@ class TokenFetcherTest {
 		FeignAuthProperties.Service service = oauth2Service(client("first"), client("second"));
 
 		assertThatThrownBy(() -> tokenFetcher.resolveClient("measure", service, "/api/other"))
-				.isInstanceOf(IllegalStateException.class)
+				.isInstanceOf(FeignAuthConfigurationException.class)
 				.hasMessageContaining("Multiple default OAuth2 clients");
 	}
 

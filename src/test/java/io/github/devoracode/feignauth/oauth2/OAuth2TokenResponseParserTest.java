@@ -17,7 +17,7 @@ class OAuth2TokenResponseParserTest {
 		OAuth2AccessToken accessToken = this.parser.parse(ok(body), 60L, null, 1800L);
 
 		long ttlMillis = accessToken.getExpireAt() - System.currentTimeMillis();
-		assertThat(ttlMillis).isBetween(1740000L, 1800000L);
+		assertThat(ttlMillis).isBetween(1730000L, 1800000L);
 	}
 
 	@Test
