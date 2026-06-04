@@ -1,12 +1,10 @@
 package io.github.devoracode.feignauth.feign;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import feign.Retryer;
 import feign.RequestInterceptor;
-import feign.codec.Decoder;
+import feign.Retryer;
 import feign.codec.ErrorDecoder;
 import io.github.devoracode.feignauth.oauth2.TokenFetcher;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.util.Assert;
@@ -14,19 +12,10 @@ import org.springframework.util.Assert;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Feign client configuration that registers the authentication request interceptor.
+ * Feign client configuration that registers the authentication request interceptor,
+ * error decoder, and retryer.
  *
- * <p>This class should be referenced on each {@code @FeignClient} via the
- * {@code configuration} attribute:
- *
- * <pre>
- * &#64;FeignClient(
- *     name = "order-client",
- *     url  = "${feign.services.order.base-url}",
- *     configuration = FeignClientConfig.class
- * )
- * public interface OrderFeignClient { ... }
- * </pre>
+ * <p>Referenced via {@code @FeignClient(configuration = FeignClientConfig.class)}.
  *
  * @author Wenjie Liu
  * @since 1.0.0
@@ -57,16 +46,6 @@ public class FeignClientConfig {
 	@Bean
 	public ErrorDecoder feignAuthErrorDecoder() {
 		return new FeignAuthErrorDecoder(this.serviceMatcher, this.tokenFetcher);
-	}
-
-	@Bean
-	public Decoder feignAuthDecoder(ObjectProvider<Decoder> decoderProvider) {
-		Decoder delegate = decoderProvider.getIfAvailable();
-		FeignAuthStatusHandler statusHandler = new FeignAuthStatusHandler(this.serviceMatcher, this.tokenFetcher);
-		return new FeignAuthDecoder(
-				delegate != null ? delegate : new Decoder.Default(),
-				this.objectMapper,
-				statusHandler);
 	}
 
 	@Bean

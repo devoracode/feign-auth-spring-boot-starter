@@ -4,7 +4,6 @@ import feign.Request;
 import feign.RequestTemplate;
 import feign.Response;
 import feign.RetryableException;
-import feign.codec.Decoder;
 import io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties;
 import io.github.devoracode.feignauth.exception.FeignAuthTokenException;
 import io.github.devoracode.feignauth.oauth2.OAuth2AccessToken;
@@ -23,7 +22,6 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class FeignAuthErrorDecoderTest {
 
@@ -69,55 +67,7 @@ class FeignAuthErrorDecoderTest {
 		assertThat(tokenRequestClient.getRequestCount()).isZero();
 	}
 
-	@Test
-	void evictsOAuth2TokenAndRetriesWhenHttp200BodyContainsNumeric421Status() throws Exception {
-		FeignAuthProperties properties = new FeignAuthProperties();
-		properties.setServices(new LinkedHashMap<>());
-		properties.getServices().put("measure", oauth2Service("https://api.service-a.com",
-				client("telemetry", "/api/measure"), client("default")));
-
-		CountingTokenRequestClient tokenRequestClient = new CountingTokenRequestClient();
-		TokenFetcher tokenFetcher = new TokenFetcher(properties, new OAuth2ClientMatcher(), tokenRequestClient);
-		ServiceMatcher serviceMatcher = new ServiceMatcher(properties);
-		FeignAuthDecoder decoder = new FeignAuthDecoder(new Decoder.Default(), new ObjectMapper(),
-				new FeignAuthStatusHandler(serviceMatcher, tokenFetcher));
-
-		assertThat(tokenFetcher.getToken("measure", "/api/measure/read/1")).isEqualTo("token-1");
-
-		assertThatThrownBy(() -> decoder.decode(
-				response(200, "https://api.service-a.com/api/measure/read/1", "{\"status\":421}"), String.class))
-				.isInstanceOf(RetryableException.class);
-		assertThat(tokenFetcher.getToken("measure", "/api/measure/read/1")).isEqualTo("token-2");
-		assertThat(tokenRequestClient.getRequestCount()).isEqualTo(2);
-	}
-
-	@Test
-	void evictsOAuth2TokenAndRetriesWhenHttp200BodyContainsString423Status() throws Exception {
-		FeignAuthProperties properties = new FeignAuthProperties();
-		properties.setServices(new LinkedHashMap<>());
-		properties.getServices().put("measure", oauth2Service("https://api.service-a.com",
-				client("telemetry", "/api/measure"), client("default")));
-
-		CountingTokenRequestClient tokenRequestClient = new CountingTokenRequestClient();
-		TokenFetcher tokenFetcher = new TokenFetcher(properties, new OAuth2ClientMatcher(), tokenRequestClient);
-		ServiceMatcher serviceMatcher = new ServiceMatcher(properties);
-		FeignAuthDecoder decoder = new FeignAuthDecoder(new Decoder.Default(), new ObjectMapper(),
-				new FeignAuthStatusHandler(serviceMatcher, tokenFetcher));
-
-		assertThat(tokenFetcher.getToken("measure", "/api/measure/read/1")).isEqualTo("token-1");
-
-		assertThatThrownBy(() -> decoder.decode(
-				response(200, "https://api.service-a.com/api/measure/read/1", "{\"status\":\"423\"}"), String.class))
-				.isInstanceOf(RetryableException.class);
-		assertThat(tokenFetcher.getToken("measure", "/api/measure/read/1")).isEqualTo("token-2");
-		assertThat(tokenRequestClient.getRequestCount()).isEqualTo(2);
-	}
-
 	private static Response response(int status, String url) {
-		return response(status, url, null);
-	}
-
-	private static Response response(int status, String url, String body) {
 		Request request = Request.create(Request.HttpMethod.GET, url,
 				Collections.<String, Collection<String>>emptyMap(),
 				null, StandardCharsets.UTF_8, new RequestTemplate());
@@ -126,7 +76,6 @@ class FeignAuthErrorDecoderTest {
 				.reason("test")
 				.request(request)
 				.headers(Collections.<String, Collection<String>>emptyMap())
-				.body(body, StandardCharsets.UTF_8)
 				.build();
 	}
 
