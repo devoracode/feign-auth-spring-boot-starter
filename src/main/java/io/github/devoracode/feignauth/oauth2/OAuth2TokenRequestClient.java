@@ -2,7 +2,6 @@ package io.github.devoracode.feignauth.oauth2;
 
 import io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties;
 import io.github.devoracode.feignauth.exception.FeignAuthConfigurationException;
-import io.github.devoracode.feignauth.exception.FeignAuthTokenException;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;

@@ -1,10 +1,10 @@
 package io.github.devoracode.feignauth.feign;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import feign.Request;
 import feign.RequestTemplate;
 import feign.Response;
 import feign.RetryableException;
+import feign.codec.Decoder;
 import io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties;
 import io.github.devoracode.feignauth.exception.FeignAuthTokenException;
 import io.github.devoracode.feignauth.oauth2.OAuth2AccessToken;
@@ -12,6 +12,7 @@ import io.github.devoracode.feignauth.oauth2.OAuth2ClientMatcher;
 import io.github.devoracode.feignauth.oauth2.OAuth2TokenRequestClient;
 import io.github.devoracode.feignauth.oauth2.OAuth2TokenResponseParser;
 import io.github.devoracode.feignauth.oauth2.TokenFetcher;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.client.RestTemplate;
 
@@ -20,7 +21,6 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
-import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -78,13 +78,14 @@ class FeignAuthErrorDecoderTest {
 
 		CountingTokenRequestClient tokenRequestClient = new CountingTokenRequestClient();
 		TokenFetcher tokenFetcher = new TokenFetcher(properties, new OAuth2ClientMatcher(), tokenRequestClient);
-		FeignAuthResponseInterceptor interceptor = new FeignAuthResponseInterceptor(new ServiceMatcher(properties),
-				tokenFetcher, new ObjectMapper());
+		ServiceMatcher serviceMatcher = new ServiceMatcher(properties);
+		FeignAuthDecoder decoder = new FeignAuthDecoder(new Decoder.Default(), new ObjectMapper(),
+				new FeignAuthStatusHandler(serviceMatcher, tokenFetcher));
 
 		assertThat(tokenFetcher.getToken("measure", "/api/measure/read/1")).isEqualTo("token-1");
 
-		assertThatThrownBy(
-				() -> interceptor.inspect(response(200, "https://api.service-a.com/api/measure/read/1", "{\"status\":421}")))
+		assertThatThrownBy(() -> decoder.decode(
+				response(200, "https://api.service-a.com/api/measure/read/1", "{\"status\":421}"), String.class))
 				.isInstanceOf(RetryableException.class);
 		assertThat(tokenFetcher.getToken("measure", "/api/measure/read/1")).isEqualTo("token-2");
 		assertThat(tokenRequestClient.getRequestCount()).isEqualTo(2);
@@ -99,13 +100,14 @@ class FeignAuthErrorDecoderTest {
 
 		CountingTokenRequestClient tokenRequestClient = new CountingTokenRequestClient();
 		TokenFetcher tokenFetcher = new TokenFetcher(properties, new OAuth2ClientMatcher(), tokenRequestClient);
-		FeignAuthResponseInterceptor interceptor = new FeignAuthResponseInterceptor(new ServiceMatcher(properties),
-				tokenFetcher, new ObjectMapper());
+		ServiceMatcher serviceMatcher = new ServiceMatcher(properties);
+		FeignAuthDecoder decoder = new FeignAuthDecoder(new Decoder.Default(), new ObjectMapper(),
+				new FeignAuthStatusHandler(serviceMatcher, tokenFetcher));
 
 		assertThat(tokenFetcher.getToken("measure", "/api/measure/read/1")).isEqualTo("token-1");
 
-		assertThatThrownBy(() -> interceptor
-				.inspect(response(200, "https://api.service-a.com/api/measure/read/1", "{\"status\":\"423\"}")))
+		assertThatThrownBy(() -> decoder.decode(
+				response(200, "https://api.service-a.com/api/measure/read/1", "{\"status\":\"423\"}"), String.class))
 				.isInstanceOf(RetryableException.class);
 		assertThat(tokenFetcher.getToken("measure", "/api/measure/read/1")).isEqualTo("token-2");
 		assertThat(tokenRequestClient.getRequestCount()).isEqualTo(2);
@@ -116,7 +118,8 @@ class FeignAuthErrorDecoderTest {
 	}
 
 	private static Response response(int status, String url, String body) {
-		Request request = Request.create(Request.HttpMethod.GET, url, Collections.<String, Collection<String>>emptyMap(),
+		Request request = Request.create(Request.HttpMethod.GET, url,
+				Collections.<String, Collection<String>>emptyMap(),
 				null, StandardCharsets.UTF_8, new RequestTemplate());
 		return Response.builder()
 				.status(status)

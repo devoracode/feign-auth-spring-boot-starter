@@ -28,7 +28,7 @@ public class FeignAuthErrorDecoder implements ErrorDecoder {
 		if (response == null || response.request() == null) {
 			return this.defaultErrorDecoder.decode(methodKey, response);
 		}
-		Exception handled = this.statusHandler.handle(methodKey, response, response.status(), false);
+		Exception handled = this.statusHandler.handle(methodKey, response);
 		if (handled != null) {
 			return handled;
 		}

@@ -3,11 +3,12 @@ package io.github.devoracode.feignauth.feign;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import feign.Retryer;
 import feign.RequestInterceptor;
+import feign.codec.Decoder;
 import feign.codec.ErrorDecoder;
 import io.github.devoracode.feignauth.oauth2.TokenFetcher;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.cloud.openfeign.FeignBuilderCustomizer;
 import org.springframework.util.Assert;
 
 import java.util.concurrent.TimeUnit;
@@ -59,10 +60,13 @@ public class FeignClientConfig {
 	}
 
 	@Bean
-	public FeignBuilderCustomizer feignAuthResponseInterceptorCustomizer() {
-		FeignAuthResponseInterceptor responseInterceptor = new FeignAuthResponseInterceptor(this.serviceMatcher,
-				this.tokenFetcher, this.objectMapper);
-		return builder -> builder.responseInterceptor(responseInterceptor);
+	public Decoder feignAuthDecoder(ObjectProvider<Decoder> decoderProvider) {
+		Decoder delegate = decoderProvider.getIfAvailable();
+		FeignAuthStatusHandler statusHandler = new FeignAuthStatusHandler(this.serviceMatcher, this.tokenFetcher);
+		return new FeignAuthDecoder(
+				delegate != null ? delegate : new Decoder.Default(),
+				this.objectMapper,
+				statusHandler);
 	}
 
 	@Bean
