@@ -19,6 +19,7 @@
 - 支持同域名下配置一个兜底服务，用于处理未命中特定路径的请求。
 - 支持 OAuth2 Token 缓存，并在过期前自动刷新。
 - 支持通过 `token-field` 配置从 Token 响应中提取 accessToken 的字段路径，支持 `data.accessToken` 这样的多级路径。
+- 支持通过 `token-expires-in-seconds` 显式指定 Token 有效期；未配置时自动从响应中按层查找过期时间字段（最多三层嵌套）。
 - 内置 Spring Boot 配置元数据，IDE 可提供配置提示。
 
 ## 环境要求
@@ -36,7 +37,7 @@
 <dependency>
     <groupId>io.github.devoracode</groupId>
     <artifactId>feign-auth-spring-boot-starter</artifactId>
-    <version>1.3.0</version>
+    <version>1.4.0</version>
 </dependency>
 ```
 
@@ -142,6 +143,7 @@ feign:
 | `auth.method` | 否 | `post` | Token 请求方式，支持 `post` 和 `get`。 |
 | `auth.token-header` | 否 | `x-token` | 注入 Token 时使用的请求 Header 名称。 |
 | `auth.token-field` | 否 | 空 | Token 响应中 accessToken 的字段路径，支持 `data.accessToken` 这样的多级路径。不填时自动识别 `access_token`、`accessToken`、`token`。 |
+| `auth.token-expires-in-seconds` | 否 | 空 | Token 有效期（秒）。配置为正数时直接使用该值，不再从响应中解析过期时间。 |
 | `auth.expire-ahead-seconds` | 否 | `60` | Token 过期前多少秒刷新缓存。 |
 | `auth.request-fields.client-id` | 否 | `client_id` | Token 请求中 client id 的字段名。不配置时使用默认值 `client_id`。 |
 | `auth.request-fields.client-secret` | 否 | `client_secret` | Token 请求中 client secret 的字段名。不配置时使用默认值 `client_secret`。 |
@@ -238,16 +240,55 @@ auth:
 
 `token-field` 配置后，starter 只从该路径提取 Token，不再尝试内置字段名。
 
-**过期时间字段**
+**过期时间**
 
-过期时间支持以下字段名：
+解析优先级如下：
+
+1. **配置了 `auth.token-expires-in-seconds` 且值为正数** — 直接使用该配置作为 Token 有效期（秒），忽略响应中的过期时间字段。
+2. **未配置** — 在 Token 响应 JSON 中自动查找，按层向下搜索，最多三层（根对象 + 两层嵌套对象）。
+
+每层依次尝试以下字段名，取第一个有效正数值：
 
 - `expires_in`
 - `expiresIn`
 - `expire_in`
 - `expireIn`
 
-如果响应中没有过期时间字段，starter 默认按 7200 秒缓存 Token。
+更浅层的命中优先于更深层。例如根对象与子对象同时存在 `expires_in` 时，使用根对象的值。
+
+**显式指定有效期示例**
+
+当第三方 Token 响应不包含过期时间，或有效期固定已知时：
+
+```yaml
+auth:
+  type: oauth2
+  token-url: https://api.example.com/oauth/token
+  token-expires-in-seconds: 1800
+  clients:
+    - id: my-client
+      secret: my-secret
+```
+
+**嵌套响应自动识别示例**
+
+响应结构为：
+
+```json
+{
+  "code": 0,
+  "result": {
+    "payload": {
+      "expire_in": 1200,
+      "accessToken": "eyJhbGci..."
+    }
+  }
+}
+```
+
+未配置 `token-expires-in-seconds` 时，starter 会在第三层 `payload` 对象中找到 `expire_in: 1200`，并按 1200 秒缓存 Token（再减去 `expire-ahead-seconds`）。
+
+如果响应中未找到任何过期时间字段，且未配置 `token-expires-in-seconds`，starter 默认按 **7200 秒** 缓存 Token。
 
 ## API Key 配置说明
 
@@ -465,11 +506,17 @@ public interface ConsoleFeignClient {
 
 starter 会自动注册以下组件：
 
-- `FeignAuthAutoConfiguration`
-- `FeignAuthProperties`
-- `feignAuthRestTemplate`：starter 内部专用的 `RestTemplate` bean，始终独立注册，与业务项目中自定义的 `RestTemplate` bean 完全隔离，互不影响。
-- `ObjectMapper`：当业务项目中不存在自定义 `ObjectMapper` bean 时注册。
-- `TokenFetcher`：当业务项目中不存在自定义 `TokenFetcher` bean 时注册。
+| Bean | 说明 |
+| --- | --- |
+| `FeignAuthAutoConfiguration` | 自动配置入口（`io.github.devoracode.feignauth.autoconfigure`） |
+| `FeignAuthProperties` | 绑定 `feign.services.*` 配置 |
+| `feignAuthRestTemplate` | starter 内部专用的 `RestTemplate`，与业务项目中的 `RestTemplate` 完全隔离 |
+| `ServiceMatcher` | 按 base-url 与 path-prefix 匹配服务配置 |
+| `OAuth2ClientMatcher` | 按 path-prefix 匹配 OAuth2 client |
+| `TokenFetcher` | 获取并缓存 OAuth2 Token；业务项目可自定义同名 Bean 覆盖 |
+| `ObjectMapper` | 当业务项目中不存在自定义 `ObjectMapper` Bean 时注册 |
+
+业务 FeignClient 通过 `configuration = FeignClientConfig.class` 注册 `FeignAuthRequestInterceptor`，在每次请求发出前注入鉴权 Header。
 
 为了兼容 Spring Boot 2.x，自动配置同时声明在以下文件中：
 
@@ -484,6 +531,9 @@ starter 内置 Spring Boot Configuration Metadata。IDE 可以对以下配置提
 - `feign.services.*.base-url`
 - `feign.services.*.auth.type`
 - `feign.services.*.auth.token-url`
+- `feign.services.*.auth.token-field`
+- `feign.services.*.auth.token-expires-in-seconds`
+- `feign.services.*.auth.expire-ahead-seconds`
 - `feign.services.*.auth.clients[].id`
 - `feign.services.*.auth.clients[].path-prefixes`
 - `feign.services.*.auth.header-name`
@@ -513,6 +563,7 @@ starter 内置 Spring Boot Configuration Metadata。IDE 可以对以下配置提
 - 需要兜底时，每个 OAuth2 服务只配置一个默认 client。
 - 同一个 `base-url` 下，每种兜底 API Key 服务只能配置一个。
 - 除非第三方接口明确要求，否则建议使用常见 Header 名称，例如 `Authorization`。
+- 第三方 Token 响应不含过期时间字段时，可配置 `token-expires-in-seconds` 显式指定缓存时长。
 - 不要把真实密钥提交到代码仓库，建议使用环境变量、配置中心或密钥管理系统注入。
 
 环境变量示例：

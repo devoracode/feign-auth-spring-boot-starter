@@ -2,19 +2,19 @@
   "groups": [
     {
       "name": "feign",
-      "type": "io.github.devoracode.feignauth.config.FeignAuthProperties",
-      "sourceType": "io.github.devoracode.feignauth.config.FeignAuthProperties"
+      "type": "io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties",
+      "sourceType": "io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties"
     },
     {
       "name": "feign.services",
-      "type": "java.util.Map<java.lang.String,io.github.devoracode.feignauth.config.FeignAuthProperties$ServiceConfig>",
-      "sourceType": "io.github.devoracode.feignauth.config.FeignAuthProperties"
+      "type": "java.util.Map<java.lang.String,io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties$Service>",
+      "sourceType": "io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties"
     }
   ],
   "properties": [
     {
       "name": "feign.services",
-      "type": "java.util.Map<java.lang.String,io.github.devoracode.feignauth.config.FeignAuthProperties$ServiceConfig>",
+      "type": "java.util.Map<java.lang.String,io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties$Service>",
       "description": "Named third-party API service configurations keyed by service name."
     },
     {
@@ -67,6 +67,11 @@
       "description": "Dot-separated JSON path to extract the access token from the token response, e.g. data.accessToken. When blank, the built-in auto-detection (access_token / accessToken / token) is used."
     },
     {
+      "name": "feign.services.*.auth.token-expires-in-seconds",
+      "type": "java.lang.Long",
+      "description": "Configured OAuth2 access token TTL in seconds. When set to a positive value, overrides expires_in / expiresIn / expire_in / expireIn fields in the token response."
+    },
+    {
       "name": "feign.services.*.auth.request-fields.client-id",
       "type": "java.lang.String",
       "description": "OAuth2 request field name for client id. When not set, defaults to clientId."
@@ -83,7 +88,7 @@
     },
     {
       "name": "feign.services.*.auth.clients",
-      "type": "java.util.List<io.github.devoracode.feignauth.config.FeignAuthProperties$ClientConfig>",
+      "type": "java.util.List<io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties$Client>",
       "description": "OAuth2 client credentials and optional path prefix routes."
     },
     {

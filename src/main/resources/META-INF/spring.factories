@@ -1,2 +1,2 @@
 org.springframework.boot.autoconfigure.EnableAutoConfiguration=\
-io.github.devoracode.feignauth.config.FeignAuthAutoConfiguration
+io.github.devoracode.feignauth.autoconfigure.FeignAuthAutoConfiguration
