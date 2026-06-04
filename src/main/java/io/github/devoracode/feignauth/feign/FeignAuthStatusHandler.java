@@ -15,10 +15,11 @@ import org.springframework.util.StringUtils;
 import java.net.URI;
 
 /**
- * Shared status handling for both HTTP errors and business-status errors in successful responses.
+ * Handles HTTP error responses for Feign requests, including OAuth2 token eviction
+ * on expired-token status codes and clear error messages for common HTTP errors.
  *
  * @author Wenjie Liu
- * @since 1.4.0
+ * @since 1.0.0
  */
 final class FeignAuthStatusHandler {
 
@@ -35,62 +36,81 @@ final class FeignAuthStatusHandler {
 		this.tokenFetcher = tokenFetcher;
 	}
 
-	Exception handle(String methodKey, Response response, Integer effectiveStatus, boolean businessStatus) {
+	/**
+	 * Handle an HTTP error response.
+	 * <p>When the status is 421 or 423 and the service uses OAuth2, the cached token
+	 * is evicted and a {@link RetryableException} is returned to trigger a retry.
+	 * For other 4xx/5xx statuses a descriptive {@link FeignAuthTokenException} is returned.
+	 * @param methodKey the Feign method key (used to build the cause exception)
+	 * @param response the Feign response
+	 * @return an exception to propagate, or {@code null} when the status is below 400
+	 */
+	Exception handle(String methodKey, Response response) {
+		return handle(methodKey, response, response != null ? response.status() : null);
+	}
+
+	/**
+	 * Handle a response using an explicit effective status code.
+	 * <p>Used by {@link FeignAuthDecoder} to handle business-level status codes
+	 * embedded inside HTTP 200 response bodies.
+	 * @param methodKey the Feign method key
+	 * @param response the Feign response
+	 * @param effectiveStatus the status code to evaluate (may differ from HTTP status)
+	 * @return an exception to propagate, or {@code null} when no action is needed
+	 */
+	Exception handle(String methodKey, Response response, Integer effectiveStatus) {
 		if (response == null || response.request() == null || effectiveStatus == null) {
 			return null;
 		}
 
+		int status = effectiveStatus;
 		ResolvedRequest request = ResolvedRequest.from(response.request());
-		ResolvedService resolved = request == null ? null : this.serviceMatcher.match(request.getBaseUrl(),
-				request.getRequestPath());
-		if (isExpiredTokenStatus(effectiveStatus) && isOAuth2Service(resolved) && request != null) {
-			return handleExpiredToken(response, resolved, request, effectiveStatus, businessStatus);
+		ResolvedService resolved = (request != null)
+				? this.serviceMatcher.match(request.getBaseUrl(), request.getRequestPath()) : null;
+
+		if (isExpiredTokenStatus(status) && isOAuth2Service(resolved) && request != null) {
+			return handleExpiredToken(response, resolved, request, status);
 		}
-		if (effectiveStatus < 400) {
+		if (status < 400) {
 			return null;
 		}
 
-		String serviceName = resolved == null ? "unknown" : resolved.getServiceName();
-		String statusText = describeStatus(response.status(), effectiveStatus, businessStatus);
-		Exception cause = businessStatus ? null : FeignException.errorStatus(methodKey, response);
-		if (effectiveStatus == 401) {
-			return illegalState("FeignAuth: service '" + serviceName + "' " + statusText
+		String serviceName = (resolved != null) ? resolved.getServiceName() : "unknown";
+		Exception cause = FeignException.errorStatus(methodKey, response);
+		if (status == 401) {
+			return new FeignAuthTokenException("FeignAuth: service '" + serviceName + "' returned " + status
 					+ ", current credentials are not allowed to access this endpoint", cause);
 		}
-		if (effectiveStatus == 403) {
-			return illegalState("FeignAuth: service '" + serviceName + "' " + statusText
+		if (status == 403) {
+			return new FeignAuthTokenException("FeignAuth: service '" + serviceName + "' returned " + status
 					+ ", the remote service explicitly rejected this request", cause);
 		}
-		if (effectiveStatus == 404) {
-			return illegalState("FeignAuth: service '" + serviceName + "' " + statusText
+		if (status == 404) {
+			return new FeignAuthTokenException("FeignAuth: service '" + serviceName + "' returned " + status
 					+ ", the target resource or path does not exist", cause);
 		}
-		if (effectiveStatus == 429) {
-			return illegalState("FeignAuth: service '" + serviceName + "' " + statusText
+		if (status == 429) {
+			return new FeignAuthTokenException("FeignAuth: service '" + serviceName + "' returned " + status
 					+ ", the remote service rate limit has been exceeded", cause);
 		}
-		if (effectiveStatus >= 500) {
-			return illegalState("FeignAuth: service '" + serviceName + "' " + statusText
+		if (status >= 500) {
+			return new FeignAuthTokenException("FeignAuth: service '" + serviceName + "' returned " + status
 					+ ", the remote service is temporarily unavailable", cause);
 		}
-		return illegalState("FeignAuth: service '" + serviceName + "' " + statusText
+		return new FeignAuthTokenException("FeignAuth: service '" + serviceName + "' returned " + status
 				+ ", request failed on the remote side", cause);
 	}
 
 	private Exception handleExpiredToken(Response response, ResolvedService resolved, ResolvedRequest request,
-			int effectiveStatus, boolean businessStatus) {
+			int status) {
 		boolean evicted = this.tokenFetcher.invalidateToken(resolved.getServiceName(), request.getRequestPath());
-		String message = "FeignAuth: service '" + resolved.getServiceName() + "' "
-				+ describeStatus(response.status(), effectiveStatus, businessStatus)
+		String message = "FeignAuth: service '" + resolved.getServiceName() + "' returned " + status
 				+ ", OAuth2 token cache evicted=" + evicted + ", retrying request";
 		if (logger.isWarnEnabled()) {
 			logger.warn(message);
 		}
-		return new RetryableException(effectiveStatus, message, response.request().httpMethod(), null, response.request());
-	}
-
-	private static FeignAuthTokenException illegalState(String message, Exception cause) {
-		return cause == null ? new FeignAuthTokenException(message) : new FeignAuthTokenException(message, cause);
+		return new RetryableException(status, message, response.request().httpMethod(), null,
+				response.request());
 	}
 
 	private static boolean isExpiredTokenStatus(int status) {
@@ -100,11 +120,6 @@ final class FeignAuthStatusHandler {
 	private static boolean isOAuth2Service(ResolvedService resolved) {
 		return resolved != null && resolved.getService() != null && resolved.getService().getAuth() != null
 				&& resolved.getService().getAuth().isOAuth2();
-	}
-
-	private static String describeStatus(int httpStatus, int effectiveStatus, boolean businessStatus) {
-		return businessStatus ? "returned HTTP " + httpStatus + " but body.status=" + effectiveStatus
-				: "returned " + effectiveStatus;
 	}
 
 	static final class ResolvedRequest {
@@ -133,7 +148,8 @@ final class FeignAuthStatusHandler {
 			try {
 				URI uri = URI.create(request.url());
 				String path = StringUtils.hasText(uri.getRawPath()) ? uri.getRawPath() : "";
-				return new ResolvedRequest(uri.getScheme() + "://" + uri.getAuthority(), PathUtils.normalizePath(path));
+				return new ResolvedRequest(uri.getScheme() + "://" + uri.getAuthority(),
+						PathUtils.normalizePath(path));
 			}
 			catch (Exception ex) {
 				return null;

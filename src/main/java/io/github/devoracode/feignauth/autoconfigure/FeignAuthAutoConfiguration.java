@@ -2,7 +2,6 @@ package io.github.devoracode.feignauth.autoconfigure;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import feign.RequestInterceptor;
-import io.github.devoracode.feignauth.feign.FeignAuthRequestInterceptor;
 import io.github.devoracode.feignauth.feign.ServiceMatcher;
 import io.github.devoracode.feignauth.oauth2.OAuth2ClientMatcher;
 import io.github.devoracode.feignauth.oauth2.OAuth2TokenRequestClient;
