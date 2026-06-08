@@ -1,6 +1,5 @@
 package io.github.devoracode.feignauth.feign;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import feign.RequestInterceptor;
 import feign.Retryer;
 import feign.codec.ErrorDecoder;
@@ -27,15 +26,11 @@ public class FeignClientConfig {
 
 	private final TokenFetcher tokenFetcher;
 
-	private final ObjectMapper objectMapper;
-
-	public FeignClientConfig(ServiceMatcher serviceMatcher, TokenFetcher tokenFetcher, ObjectMapper objectMapper) {
+	public FeignClientConfig(ServiceMatcher serviceMatcher, TokenFetcher tokenFetcher) {
 		Assert.notNull(serviceMatcher, "serviceMatcher must not be null");
 		Assert.notNull(tokenFetcher, "tokenFetcher must not be null");
-		Assert.notNull(objectMapper, "objectMapper must not be null");
 		this.serviceMatcher = serviceMatcher;
 		this.tokenFetcher = tokenFetcher;
-		this.objectMapper = objectMapper;
 	}
 
 	@Bean

@@ -46,29 +46,16 @@ final class FeignAuthStatusHandler {
 	 * @return an exception to propagate, or {@code null} when the status is below 400
 	 */
 	Exception handle(String methodKey, Response response) {
-		return handle(methodKey, response, response != null ? response.status() : null);
-	}
-
-	/**
-	 * Handle a response using an explicit effective status code.
-	 * <p>Used by {@link FeignAuthDecoder} to handle business-level status codes
-	 * embedded inside HTTP 200 response bodies.
-	 * @param methodKey the Feign method key
-	 * @param response the Feign response
-	 * @param effectiveStatus the status code to evaluate (may differ from HTTP status)
-	 * @return an exception to propagate, or {@code null} when no action is needed
-	 */
-	Exception handle(String methodKey, Response response, Integer effectiveStatus) {
-		if (response == null || response.request() == null || effectiveStatus == null) {
+		if (response == null || response.request() == null) {
 			return null;
 		}
 
-		int status = effectiveStatus;
+		int status = response.status();
 		ResolvedRequest request = ResolvedRequest.from(response.request());
 		ResolvedService resolved = (request != null)
 				? this.serviceMatcher.match(request.getBaseUrl(), request.getRequestPath()) : null;
 
-		if (isExpiredTokenStatus(status) && isOAuth2Service(resolved) && request != null) {
+		if (isExpiredTokenStatus(status) && isOAuth2Service(resolved)) {
 			return handleExpiredToken(response, resolved, request, status);
 		}
 		if (status < 400) {
@@ -145,15 +132,10 @@ final class FeignAuthStatusHandler {
 			if (request == null || !StringUtils.hasText(request.url())) {
 				return null;
 			}
-			try {
-				URI uri = URI.create(request.url());
-				String path = StringUtils.hasText(uri.getRawPath()) ? uri.getRawPath() : "";
-				return new ResolvedRequest(uri.getScheme() + "://" + uri.getAuthority(),
-						PathUtils.normalizePath(path));
-			}
-			catch (Exception ex) {
-				return null;
-			}
+			URI uri = URI.create(request.url());
+			String path = StringUtils.hasText(uri.getRawPath()) ? uri.getRawPath() : "";
+			return new ResolvedRequest(uri.getScheme() + "://" + uri.getAuthority(),
+					PathUtils.normalizePath(path));
 		}
 
 	}

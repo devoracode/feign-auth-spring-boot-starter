@@ -93,7 +93,9 @@ public class OAuth2TokenRequestClient {
 		parameters.put(clientIdField, client.getId());
 		parameters.put(clientSecretField, client.getSecret());
 
-		if (StringUtils.hasText(fields.getGrantType()) && StringUtils.hasText(client.getGrantType())) {
+		if(!StringUtils.hasText(fields.getClientId()) && !StringUtils.hasText(fields.getClientSecret())){
+			parameters.put("grant_type", StringUtils.hasText(client.getGrantType()) ? client.getGrantType() : "client_credentials");
+		} else if(StringUtils.hasText(fields.getGrantType()) && StringUtils.hasText(client.getGrantType())) {
 			parameters.put(fields.getGrantType(), client.getGrantType());
 		}
 		return parameters;
