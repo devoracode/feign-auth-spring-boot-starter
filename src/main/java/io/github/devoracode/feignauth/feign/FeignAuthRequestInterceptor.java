@@ -102,7 +102,8 @@ public class FeignAuthRequestInterceptor implements RequestInterceptor {
 					"API key value is required for service: " + resolved.getServiceName());
 		}
 		String headerName = auth.resolveHeaderName();
-		template.header(headerName, auth.getValue());
+		String headerValue = prefix(auth) + auth.getValue();
+		template.header(headerName, headerValue);
 		if (logger.isInfoEnabled()) {
 			logger.info("FeignAuth [api-key] service='" + resolved.getServiceName() + "' header='" + headerName
 					+ "' path=" + requestPath);
@@ -124,11 +125,17 @@ public class FeignAuthRequestInterceptor implements RequestInterceptor {
 			throw ex;
 		}
 		String headerName = auth.resolveHeaderName();
-		template.header(headerName, token);
+		String headerValue = prefix(auth) + token;
+		template.header(headerName, headerValue);
 		if (logger.isInfoEnabled()) {
 			logger.info("FeignAuth [oauth2] service='" + resolved.getServiceName() + "' header='" + headerName
 					+ "' path=" + requestPath);
 		}
+	}
+
+	private static String prefix(FeignAuthProperties.Auth auth) {
+		String prefix = auth.getTokenPrefix();
+		return StringUtils.hasText(prefix) ? prefix : "";
 	}
 
 	private static String trimTrailingSlash(String value) {

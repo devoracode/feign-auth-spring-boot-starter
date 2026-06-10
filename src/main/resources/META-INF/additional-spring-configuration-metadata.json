@@ -51,6 +51,11 @@
       "defaultValue": "Authorization"
     },
     {
+      "name": "feign.services.*.auth.token-prefix",
+      "type": "java.lang.String",
+      "description": "Optional prefix prepended to the header value, e.g. \"Bearer \". Applies to both OAuth2 and API key auth types."
+    },
+    {
       "name": "feign.services.*.auth.value",
       "type": "java.lang.String",
       "description": "Fixed API key value used when auth.type is api-key."

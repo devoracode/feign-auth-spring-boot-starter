@@ -74,6 +74,8 @@ public class FeignAuthProperties {
 
 		private String headerName = "Authorization";
 
+		private String tokenPrefix;
+
 		private String value;
 
 		private long expireAheadSeconds = 60;
@@ -126,6 +128,14 @@ public class FeignAuthProperties {
 
 		public void setHeaderName(String headerName) {
 			this.headerName = headerName;
+		}
+
+		public String getTokenPrefix() {
+			return this.tokenPrefix;
+		}
+
+		public void setTokenPrefix(String tokenPrefix) {
+			this.tokenPrefix = tokenPrefix;
 		}
 
 		public String getValue() {
