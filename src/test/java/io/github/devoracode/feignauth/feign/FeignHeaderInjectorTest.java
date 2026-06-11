@@ -9,7 +9,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.function.BiConsumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -24,8 +23,8 @@ class FeignHeaderInjectorTest {
 	@Test
 	void injectorOnlyCalled_whenSupportsReturnsTrue() {
 		FeignAuthProperties properties = propertiesWithApiKey("svc-a", "https://api.a.com", "sk-a");
-		TrackingInjector yesInjector = new TrackingInjector("svc-a");   // supports svc-a only
-		TrackingInjector noInjector = new TrackingInjector("svc-b");    // supports svc-b only
+		TrackingInjector yesInjector = new TrackingInjector("svc-a");
+		TrackingInjector noInjector = new TrackingInjector("svc-b");
 
 		apply(properties, Arrays.asList(yesInjector, noInjector), "https://api.a.com", "/api/resource");
 
@@ -43,8 +42,8 @@ class FeignHeaderInjectorTest {
 				return "https://api.example.com".equalsIgnoreCase(service.getBaseUrl());
 			}
 			@Override
-			public void inject(String name, String path, BiConsumer<String, String> h) {
-				h.accept("X-BaseUrl-Matched", "yes");
+			public void inject(String name, String path, RequestTemplate template) {
+				template.header("X-BaseUrl-Matched", "yes");
 			}
 		};
 
@@ -61,7 +60,7 @@ class FeignHeaderInjectorTest {
 		properties.getServices().put("svc-a", apiKeyService("https://api.a.com", "sk-a", "/api/a"));
 		properties.getServices().put("svc-b", apiKeyService("https://api.b.com", "sk-b", "/api/b"));
 
-		TrackingInjector allInjector = new TrackingInjector(null); // null = supports all
+		TrackingInjector allInjector = new TrackingInjector(null);
 
 		apply(properties, Collections.singletonList(allInjector), "https://api.a.com", "/api/a/resource");
 		apply(properties, Collections.singletonList(allInjector), "https://api.b.com", "/api/b/resource");
@@ -69,7 +68,7 @@ class FeignHeaderInjectorTest {
 		assertThat(allInjector.callCount).isEqualTo(2);
 	}
 
-	// ── inject() payload ──────────────────────────────────────────────
+	// ── inject() payload ─────────────────────────────────────────────────────
 
 	@Test
 	void injectReceivesCorrectServiceNameAndPath() {
@@ -90,10 +89,10 @@ class FeignHeaderInjectorTest {
 			@Override
 			public boolean supports(String n, FeignAuthProperties.Service s) { return true; }
 			@Override
-			public void inject(String n, String p, BiConsumer<String, String> h) {
-				h.accept("X-App-Id", "my-app");
-				h.accept("X-Request-Id", "req-123");
-				h.accept("X-Timestamp", "1700000000000");
+			public void inject(String n, String p, RequestTemplate template) {
+				template.header("X-App-Id", "my-app");
+				template.header("X-Request-Id", "req-123");
+				template.header("X-Timestamp", "1700000000000");
 			}
 		};
 
@@ -113,8 +112,8 @@ class FeignHeaderInjectorTest {
 			@Override
 			public boolean supports(String n, FeignAuthProperties.Service s) { return true; }
 			@Override
-			public void inject(String n, String p, BiConsumer<String, String> h) {
-				h.accept("X-Extra", "extra-value");
+			public void inject(String n, String p, RequestTemplate template) {
+				template.header("X-Extra", "extra-value");
 			}
 		};
 
@@ -134,15 +133,15 @@ class FeignHeaderInjectorTest {
 
 		FeignHeaderInjector first = new FeignHeaderInjector() {
 			@Override public boolean supports(String n, FeignAuthProperties.Service s) { return true; }
-			@Override public void inject(String n, String p, BiConsumer<String, String> h) { order.add("first"); }
+			@Override public void inject(String n, String p, RequestTemplate t) { order.add("first"); }
 		};
 		FeignHeaderInjector second = new FeignHeaderInjector() {
 			@Override public boolean supports(String n, FeignAuthProperties.Service s) { return true; }
-			@Override public void inject(String n, String p, BiConsumer<String, String> h) { order.add("second"); }
+			@Override public void inject(String n, String p, RequestTemplate t) { order.add("second"); }
 		};
 		FeignHeaderInjector third = new FeignHeaderInjector() {
 			@Override public boolean supports(String n, FeignAuthProperties.Service s) { return true; }
-			@Override public void inject(String n, String p, BiConsumer<String, String> h) { order.add("third"); }
+			@Override public void inject(String n, String p, RequestTemplate t) { order.add("third"); }
 		};
 
 		apply(properties, Arrays.asList(first, second, third), "https://api.example.com", "/api/data");
@@ -159,7 +158,7 @@ class FeignHeaderInjectorTest {
 				new ServiceMatcher(properties), null, null);
 
 		RequestTemplate template = templateFor("https://api.example.com", "/api/data");
-		interceptor.apply(template); // must not throw
+		interceptor.apply(template);
 		assertThat(template.headers()).containsKey("Authorization");
 	}
 
@@ -225,11 +224,11 @@ class FeignHeaderInjectorTest {
 		}
 
 		@Override
-		public void inject(String serviceName, String requestPath, BiConsumer<String, String> header) {
+		public void inject(String serviceName, String requestPath, RequestTemplate template) {
 			this.callCount++;
 			this.lastServiceName = serviceName;
 			this.lastRequestPath = requestPath;
-			header.accept("X-Tracked", String.valueOf(this.callCount));
+			template.header("X-Tracked", String.valueOf(this.callCount));
 		}
 
 	}

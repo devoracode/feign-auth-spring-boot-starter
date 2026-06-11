@@ -81,7 +81,7 @@ public class OAuth2TokenRequestClient {
 		parameters.forEach(builder::queryParam);
 
 		HttpHeaders headers = new HttpHeaders();
-		applyTokenHeaders(serviceName, service, headers);
+		applyTokenHeaders(serviceName, service, headers, parameters);
 
 		ResponseEntity<String> response = this.restTemplate.exchange(builder.toUriString(), HttpMethod.GET,
 				new HttpEntity<>(headers), String.class);
@@ -95,7 +95,7 @@ public class OAuth2TokenRequestClient {
 
 		HttpHeaders headers = new HttpHeaders();
 		headers.setContentType(MediaType.APPLICATION_JSON);
-		applyTokenHeaders(serviceName, service, headers);
+		applyTokenHeaders(serviceName, service, headers, body);
 
 		ResponseEntity<String> response = this.restTemplate.postForEntity(auth.getTokenUrl(),
 				new HttpEntity<>(body, headers), String.class);
@@ -103,10 +103,11 @@ public class OAuth2TokenRequestClient {
 				auth.getTokenExpiresInSeconds());
 	}
 
-	private void applyTokenHeaders(String serviceName, FeignAuthProperties.Service service, HttpHeaders headers) {
+	private void applyTokenHeaders(String serviceName, FeignAuthProperties.Service service,
+			HttpHeaders headers, Map<String, String> parameters) {
 		for (FeignHeaderInjector injector : this.headerInjectors) {
 			if (injector.supports(serviceName, service)) {
-				injector.inject(serviceName, "", headers::set);
+				injector.injectTokenHeaders(serviceName, parameters, headers);
 			}
 		}
 	}

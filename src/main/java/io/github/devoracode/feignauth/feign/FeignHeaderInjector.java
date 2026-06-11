@@ -1,8 +1,10 @@
 package io.github.devoracode.feignauth.feign;
 
+import feign.RequestTemplate;
 import io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties;
+import org.springframework.http.HttpHeaders;
 
-import java.util.function.BiConsumer;
+import java.util.Map;
 
 /**
  * Strategy interface for injecting additional headers into outgoing Feign requests
@@ -26,13 +28,28 @@ public interface FeignHeaderInjector {
     boolean supports(String serviceName, FeignAuthProperties.Service service);
 
     /**
-     * Injects custom headers via the supplied consumer.
-     * <p>This method is called for both Feign business requests and OAuth2 token
-     * requests. Call {@code header.accept(name, value)} for each header to add.
+     * Injects custom headers for Feign business requests.
+     * <p>Call {@code template.header(name, value)} for each header to add.
+     * <p>Use {@link RequestTemplate#queries()}, {@link RequestTemplate#method()},
+     * and {@link RequestTemplate#body()} to access request data for signature etc.
      *
      * @param serviceName the logical service name
      * @param requestPath the normalized request path
-     * @param header      a consumer that accepts {@code (headerName, headerValue)} pairs
+     * @param template    the Feign request template
      */
-    void inject(String serviceName, String requestPath, BiConsumer<String, String> header);
+    void inject(String serviceName, String requestPath, RequestTemplate template);
+
+    /**
+     * Injects custom headers for OAuth2 token requests.
+     * <p>Call {@code headers.set(name, value)} for each header to add.
+     * <p>Use {@code parameters} to access the token request body (e.g.
+     * {@code client_id}, {@code client_secret}, {@code grant_type}).
+     * <p>The default implementation does nothing.
+     *
+     * @param serviceName the logical service name
+     * @param parameters  the token request parameters (key-value pairs)
+     * @param headers     the HTTP headers for the token request
+     */
+    default void injectTokenHeaders(String serviceName, Map<String, String> parameters, HttpHeaders headers) {
+    }
 }

@@ -165,7 +165,7 @@ public class FeignAuthRequestInterceptor implements RequestInterceptor {
 		for (FeignHeaderInjector injector : this.headerInjectors) {
 			try {
 				if (injector.supports(resolved.getServiceName(), resolved.getService())) {
-					injector.inject(resolved.getServiceName(), requestPath, template::header);
+					injector.inject(resolved.getServiceName(), requestPath, template);
 				}
 			} catch (Exception ex) {
 				logger.error("FeignAuth: header injector " + injector.getClass().getSimpleName()
