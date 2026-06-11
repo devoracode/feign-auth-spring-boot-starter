@@ -32,6 +32,10 @@ public class FeignAuthRequestInterceptor implements RequestInterceptor {
 
 	private final List<FeignHeaderInjector> headerInjectors;
 
+	public FeignAuthRequestInterceptor(ServiceMatcher serviceMatcher, TokenFetcher tokenFetcher) {
+		this(serviceMatcher, tokenFetcher, Collections.emptyList());
+	}
+
 	public FeignAuthRequestInterceptor(ServiceMatcher serviceMatcher, TokenFetcher tokenFetcher, List<FeignHeaderInjector> headerInjectors) {
         Assert.notNull(serviceMatcher, "serviceMatcher must not be null");
 		this.serviceMatcher = serviceMatcher;
@@ -71,10 +75,6 @@ public class FeignAuthRequestInterceptor implements RequestInterceptor {
 			return;
 		}
 
-		if (!this.headerInjectors.isEmpty()) {
-			applyHeaderInjectors(template, resolved, requestPath);
-		}
-
 		FeignAuthProperties.Auth auth = resolved.getService().getAuth();
 		if (auth == null) {
 			if (logger.isWarnEnabled()) {
@@ -92,6 +92,8 @@ public class FeignAuthRequestInterceptor implements RequestInterceptor {
 		if (auth.isOAuth2()) {
 			applyOAuth2(template, resolved, auth, requestPath);
 		}
+
+		applyHeaderInjectors(template, resolved, requestPath);
 	}
 
 	/**
@@ -159,6 +161,9 @@ public class FeignAuthRequestInterceptor implements RequestInterceptor {
 	private void applyHeaderInjectors(RequestTemplate template,
 	                                  ResolvedService resolved,
 	                                  String requestPath) {
+		if (this.headerInjectors.isEmpty()) {
+			return;
+		}
 		for (FeignHeaderInjector injector : this.headerInjectors) {
 			try {
 				if (injector.supports(resolved.getServiceName(), resolved.getService())) {
