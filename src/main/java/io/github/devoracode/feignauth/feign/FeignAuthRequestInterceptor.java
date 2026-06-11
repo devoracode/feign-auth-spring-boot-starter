@@ -12,6 +12,8 @@ import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
 
 import java.net.URI;
+import java.util.Collections;
+import java.util.List;
 
 /**
  * Feign {@link RequestInterceptor} that injects authentication headers based on configured
@@ -28,10 +30,13 @@ public class FeignAuthRequestInterceptor implements RequestInterceptor {
 
 	private final TokenFetcher tokenFetcher;
 
-	public FeignAuthRequestInterceptor(ServiceMatcher serviceMatcher, TokenFetcher tokenFetcher) {
-		Assert.notNull(serviceMatcher, "serviceMatcher must not be null");
+	private final List<FeignHeaderInjector> headerInjectors;
+
+	public FeignAuthRequestInterceptor(ServiceMatcher serviceMatcher, TokenFetcher tokenFetcher, List<FeignHeaderInjector> headerInjectors) {
+        Assert.notNull(serviceMatcher, "serviceMatcher must not be null");
 		this.serviceMatcher = serviceMatcher;
 		this.tokenFetcher = tokenFetcher;
+		this.headerInjectors = (headerInjectors != null) ? headerInjectors : Collections.emptyList();
 	}
 
 	@Override
@@ -64,6 +69,10 @@ public class FeignAuthRequestInterceptor implements RequestInterceptor {
 						+ " — request will be sent without auth header");
 			}
 			return;
+		}
+
+		if (!this.headerInjectors.isEmpty()) {
+			applyHeaderInjectors(template, resolved, requestPath);
 		}
 
 		FeignAuthProperties.Auth auth = resolved.getService().getAuth();
@@ -146,6 +155,22 @@ public class FeignAuthRequestInterceptor implements RequestInterceptor {
 			value = value.substring(0, value.length() - 1);
 		}
 		return value;
+	}
+	private void applyHeaderInjectors(RequestTemplate template,
+	                                  ResolvedService resolved,
+	                                  String requestPath) {
+		for (FeignHeaderInjector injector : this.headerInjectors) {
+			try {
+				if (injector.supports(resolved.getServiceName(), resolved.getService())) {
+					injector.inject(resolved.getServiceName(), requestPath, template);
+				}
+			} catch (Exception ex) {
+				logger.error("FeignAuth: header injector " + injector.getClass().getSimpleName()
+						+ " failed for service='" + resolved.getServiceName() + "': " + ex.getMessage(), ex);
+				// 视业务需要决定是否 rethrow
+				throw ex;
+			}
+		}
 	}
 
 }
