@@ -7,10 +7,8 @@ import io.github.devoracode.feignauth.exception.FeignAuthConfigurationException;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
-import java.util.function.BiConsumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -80,7 +78,6 @@ class FeignClientConfigTest {
 		assertThat(injector.invokedForService).isEqualTo("orders");
 		assertThat(injector.invokedForPath).isEqualTo("/api/orders/1");
 		assertThat(template.headers()).containsKey("X-Custom");
-		// auth header must also be present
 		assertThat(template.headers()).containsKey("Authorization");
 	}
 
@@ -112,18 +109,18 @@ class FeignClientConfigTest {
 			@Override
 			public boolean supports(String n, FeignAuthProperties.Service s) { return true; }
 			@Override
-			public void inject(String n, String p, BiConsumer<String, String> h) {
+			public void inject(String n, String p, RequestTemplate template) {
 				callOrder.add("first");
-				h.accept("X-First", "1");
+				template.header("X-First", "1");
 			}
 		};
 		FeignHeaderInjector second = new FeignHeaderInjector() {
 			@Override
 			public boolean supports(String n, FeignAuthProperties.Service s) { return true; }
 			@Override
-			public void inject(String n, String p, BiConsumer<String, String> h) {
+			public void inject(String n, String p, RequestTemplate template) {
 				callOrder.add("second");
-				h.accept("X-Second", "2");
+				template.header("X-Second", "2");
 			}
 		};
 
@@ -139,7 +136,6 @@ class FeignClientConfigTest {
 	void headerInjectorNotCalledWhenNoServiceMatches() {
 		FeignAuthProperties properties = new FeignAuthProperties();
 		properties.setServices(new LinkedHashMap<>());
-		// service registered under a different base-url
 		properties.getServices().put("other", apiKeyService("https://other.example.com", "sk-key"));
 
 		RecordingInjector injector = new RecordingInjector(true);
@@ -149,7 +145,6 @@ class FeignClientConfigTest {
 		RequestTemplate template = templateFor("https://api.example.com", "/api/orders/1");
 		interceptor.apply(template);
 
-		// no match → injector must not be called
 		assertThat(injector.invokedForService).isNull();
 	}
 
@@ -176,7 +171,7 @@ class FeignClientConfigTest {
 			@Override
 			public boolean supports(String n, FeignAuthProperties.Service s) { return true; }
 			@Override
-			public void inject(String n, String p, BiConsumer<String, String> h) {
+			public void inject(String n, String p, RequestTemplate template) {
 				throw new RuntimeException("injector exploded");
 			}
 		};
@@ -220,7 +215,6 @@ class FeignClientConfigTest {
 		return service;
 	}
 
-	/** Records the last injection call; optionally returns false from supports(). */
 	private static final class RecordingInjector implements FeignHeaderInjector {
 
 		private final boolean supported;
@@ -237,10 +231,10 @@ class FeignClientConfigTest {
 		}
 
 		@Override
-		public void inject(String serviceName, String requestPath, BiConsumer<String, String> header) {
+		public void inject(String serviceName, String requestPath, RequestTemplate template) {
 			this.invokedForService = serviceName;
 			this.invokedForPath = requestPath;
-			header.accept("X-Custom", "injected");
+			template.header("X-Custom", "injected");
 		}
 
 	}
