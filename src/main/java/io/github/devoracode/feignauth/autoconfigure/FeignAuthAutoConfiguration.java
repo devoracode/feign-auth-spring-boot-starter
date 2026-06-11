@@ -2,6 +2,7 @@ package io.github.devoracode.feignauth.autoconfigure;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import feign.RequestInterceptor;
+import io.github.devoracode.feignauth.feign.FeignHeaderInjector;
 import io.github.devoracode.feignauth.feign.ServiceMatcher;
 import io.github.devoracode.feignauth.oauth2.OAuth2ClientMatcher;
 import io.github.devoracode.feignauth.oauth2.OAuth2TokenRequestClient;
@@ -16,6 +17,8 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.client.RestTemplate;
+
+import java.util.List;
 
 /**
  * Auto-configuration for feign-auth-spring-boot-starter.
@@ -58,9 +61,11 @@ public class FeignAuthAutoConfiguration {
 
 		@Bean
 		TokenFetcher tokenFetcher(FeignAuthProperties properties, OAuth2ClientMatcher clientMatcher,
-				@Qualifier("feignAuthRestTemplate") RestTemplate restTemplate, ObjectMapper objectMapper) {
+				@Qualifier("feignAuthRestTemplate") RestTemplate restTemplate, ObjectMapper objectMapper,
+				List<FeignHeaderInjector> headerInjectors) {
 			OAuth2TokenResponseParser responseParser = new OAuth2TokenResponseParser(objectMapper);
-			OAuth2TokenRequestClient tokenRequestClient = new OAuth2TokenRequestClient(restTemplate, responseParser);
+			OAuth2TokenRequestClient tokenRequestClient = new OAuth2TokenRequestClient(restTemplate, responseParser,
+					headerInjectors);
 			return new TokenFetcher(properties, clientMatcher, tokenRequestClient);
 		}
 

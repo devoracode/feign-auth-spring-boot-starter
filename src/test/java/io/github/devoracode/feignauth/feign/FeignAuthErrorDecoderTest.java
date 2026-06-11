@@ -108,7 +108,8 @@ class FeignAuthErrorDecoderTest {
 		}
 
 		@Override
-		public OAuth2AccessToken requestToken(FeignAuthProperties.Service service, FeignAuthProperties.Client client) {
+		public OAuth2AccessToken requestToken(String serviceName, FeignAuthProperties.Service service,
+				FeignAuthProperties.Client client) {
 			this.requestCount++;
 			OAuth2AccessToken accessToken = new OAuth2AccessToken();
 			accessToken.setAccessToken("token-" + this.requestCount);

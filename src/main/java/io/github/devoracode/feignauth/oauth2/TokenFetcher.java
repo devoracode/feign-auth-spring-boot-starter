@@ -132,7 +132,7 @@ public class TokenFetcher {
 				logger.info("FeignAuth [oauth2] fetching new token for service='" + serviceName + "', clientId='"
 						+ client.getId() + "'");
 			}
-			OAuth2AccessToken refreshed = this.tokenRequestClient.requestToken(service, client);
+			OAuth2AccessToken refreshed = this.tokenRequestClient.requestToken(serviceName, service, client);
 			this.tokenCache.put(cacheKey, refreshed);
 			if (logger.isInfoEnabled()) {
 				logger.info("FeignAuth [oauth2] token cached for service='" + serviceName + "', clientId='"
