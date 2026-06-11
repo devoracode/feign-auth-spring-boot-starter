@@ -10,6 +10,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.function.BiConsumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -111,18 +112,18 @@ class FeignClientConfigTest {
 			@Override
 			public boolean supports(String n, FeignAuthProperties.Service s) { return true; }
 			@Override
-			public void inject(String n, String p, RequestTemplate t) {
+			public void inject(String n, String p, BiConsumer<String, String> h) {
 				callOrder.add("first");
-				t.header("X-First", "1");
+				h.accept("X-First", "1");
 			}
 		};
 		FeignHeaderInjector second = new FeignHeaderInjector() {
 			@Override
 			public boolean supports(String n, FeignAuthProperties.Service s) { return true; }
 			@Override
-			public void inject(String n, String p, RequestTemplate t) {
+			public void inject(String n, String p, BiConsumer<String, String> h) {
 				callOrder.add("second");
-				t.header("X-Second", "2");
+				h.accept("X-Second", "2");
 			}
 		};
 
@@ -175,7 +176,7 @@ class FeignClientConfigTest {
 			@Override
 			public boolean supports(String n, FeignAuthProperties.Service s) { return true; }
 			@Override
-			public void inject(String n, String p, RequestTemplate t) {
+			public void inject(String n, String p, BiConsumer<String, String> h) {
 				throw new RuntimeException("injector exploded");
 			}
 		};
@@ -236,10 +237,10 @@ class FeignClientConfigTest {
 		}
 
 		@Override
-		public void inject(String serviceName, String requestPath, RequestTemplate template) {
+		public void inject(String serviceName, String requestPath, BiConsumer<String, String> header) {
 			this.invokedForService = serviceName;
 			this.invokedForPath = requestPath;
-			template.header("X-Custom", "injected");
+			header.accept("X-Custom", "injected");
 		}
 
 	}

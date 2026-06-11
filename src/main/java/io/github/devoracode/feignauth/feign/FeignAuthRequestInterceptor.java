@@ -86,7 +86,6 @@ public class FeignAuthRequestInterceptor implements RequestInterceptor {
 
 		if (auth.isApiKey()) {
 			applyApiKey(template, resolved, auth, requestPath);
-			return;
 		}
 
 		if (auth.isOAuth2()) {
@@ -127,8 +126,7 @@ public class FeignAuthRequestInterceptor implements RequestInterceptor {
 		String token;
 		try {
 			token = this.tokenFetcher.getToken(resolved.getServiceName(), requestPath);
-		}
-		catch (Exception ex) {
+		} catch (Exception ex) {
 			if (logger.isErrorEnabled()) {
 				logger.error("FeignAuth [oauth2] failed to obtain token for service='" + resolved.getServiceName()
 						+ "', path=" + requestPath + ": " + ex.getMessage(), ex);
@@ -167,7 +165,7 @@ public class FeignAuthRequestInterceptor implements RequestInterceptor {
 		for (FeignHeaderInjector injector : this.headerInjectors) {
 			try {
 				if (injector.supports(resolved.getServiceName(), resolved.getService())) {
-					injector.inject(resolved.getServiceName(), requestPath, template);
+					injector.inject(resolved.getServiceName(), requestPath, template::header);
 				}
 			} catch (Exception ex) {
 				logger.error("FeignAuth: header injector " + injector.getClass().getSimpleName()

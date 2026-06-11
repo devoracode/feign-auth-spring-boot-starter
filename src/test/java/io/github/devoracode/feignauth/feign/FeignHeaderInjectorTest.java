@@ -9,6 +9,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.function.BiConsumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -42,8 +43,8 @@ class FeignHeaderInjectorTest {
 				return "https://api.example.com".equalsIgnoreCase(service.getBaseUrl());
 			}
 			@Override
-			public void inject(String name, String path, RequestTemplate template) {
-				template.header("X-BaseUrl-Matched", "yes");
+			public void inject(String name, String path, BiConsumer<String, String> h) {
+				h.accept("X-BaseUrl-Matched", "yes");
 			}
 		};
 
@@ -68,7 +69,7 @@ class FeignHeaderInjectorTest {
 		assertThat(allInjector.callCount).isEqualTo(2);
 	}
 
-	// ── inject() payload ─────────────────────────────────────────────────────
+	// ── inject() payload ──────────────────────────────────────────────
 
 	@Test
 	void injectReceivesCorrectServiceNameAndPath() {
@@ -89,10 +90,10 @@ class FeignHeaderInjectorTest {
 			@Override
 			public boolean supports(String n, FeignAuthProperties.Service s) { return true; }
 			@Override
-			public void inject(String n, String p, RequestTemplate t) {
-				t.header("X-App-Id", "my-app");
-				t.header("X-Request-Id", "req-123");
-				t.header("X-Timestamp", "1700000000000");
+			public void inject(String n, String p, BiConsumer<String, String> h) {
+				h.accept("X-App-Id", "my-app");
+				h.accept("X-Request-Id", "req-123");
+				h.accept("X-Timestamp", "1700000000000");
 			}
 		};
 
@@ -108,15 +109,12 @@ class FeignHeaderInjectorTest {
 	void injectorDoesNotOverwriteExistingAuthHeader() {
 		FeignAuthProperties properties = propertiesWithApiKey("svc", "https://api.example.com", "sk-original");
 
-		// An injector that mistakenly also sets Authorization — the last write wins in
-		// Feign's header map, so we assert the auth header is at least set by someone.
 		FeignHeaderInjector authOverwriter = new FeignHeaderInjector() {
 			@Override
 			public boolean supports(String n, FeignAuthProperties.Service s) { return true; }
 			@Override
-			public void inject(String n, String p, RequestTemplate t) {
-				// sets a different extra header to simulate a benign injector
-				t.header("X-Extra", "extra-value");
+			public void inject(String n, String p, BiConsumer<String, String> h) {
+				h.accept("X-Extra", "extra-value");
 			}
 		};
 
@@ -136,15 +134,15 @@ class FeignHeaderInjectorTest {
 
 		FeignHeaderInjector first = new FeignHeaderInjector() {
 			@Override public boolean supports(String n, FeignAuthProperties.Service s) { return true; }
-			@Override public void inject(String n, String p, RequestTemplate t) { order.add("first"); }
+			@Override public void inject(String n, String p, BiConsumer<String, String> h) { order.add("first"); }
 		};
 		FeignHeaderInjector second = new FeignHeaderInjector() {
 			@Override public boolean supports(String n, FeignAuthProperties.Service s) { return true; }
-			@Override public void inject(String n, String p, RequestTemplate t) { order.add("second"); }
+			@Override public void inject(String n, String p, BiConsumer<String, String> h) { order.add("second"); }
 		};
 		FeignHeaderInjector third = new FeignHeaderInjector() {
 			@Override public boolean supports(String n, FeignAuthProperties.Service s) { return true; }
-			@Override public void inject(String n, String p, RequestTemplate t) { order.add("third"); }
+			@Override public void inject(String n, String p, BiConsumer<String, String> h) { order.add("third"); }
 		};
 
 		apply(properties, Arrays.asList(first, second, third), "https://api.example.com", "/api/data");
@@ -227,11 +225,11 @@ class FeignHeaderInjectorTest {
 		}
 
 		@Override
-		public void inject(String serviceName, String requestPath, RequestTemplate template) {
+		public void inject(String serviceName, String requestPath, BiConsumer<String, String> header) {
 			this.callCount++;
 			this.lastServiceName = serviceName;
 			this.lastRequestPath = requestPath;
-			template.header("X-Tracked", String.valueOf(this.callCount));
+			header.accept("X-Tracked", String.valueOf(this.callCount));
 		}
 
 	}

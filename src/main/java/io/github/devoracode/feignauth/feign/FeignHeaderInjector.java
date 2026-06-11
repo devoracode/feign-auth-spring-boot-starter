@@ -1,10 +1,12 @@
 package io.github.devoracode.feignauth.feign;
 
-import feign.RequestTemplate;
 import io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties;
 
+import java.util.function.BiConsumer;
+
 /**
- * Strategy interface for injecting additional headers into outgoing Feign requests.
+ * Strategy interface for injecting additional headers into outgoing Feign requests
+ * and OAuth2 token requests.
  *
  * <p>Implement this interface and register it as a Spring bean to inject
  * extra headers for one or more configured services.
@@ -24,11 +26,13 @@ public interface FeignHeaderInjector {
     boolean supports(String serviceName, FeignAuthProperties.Service service);
 
     /**
-     * Injects headers into the request template.
+     * Injects custom headers via the supplied consumer.
+     * <p>This method is called for both Feign business requests and OAuth2 token
+     * requests. Call {@code header.accept(name, value)} for each header to add.
      *
      * @param serviceName the logical service name
      * @param requestPath the normalized request path
-     * @param template    the Feign request template to modify
+     * @param header      a consumer that accepts {@code (headerName, headerValue)} pairs
      */
-    void inject(String serviceName, String requestPath, RequestTemplate template);
+    void inject(String serviceName, String requestPath, BiConsumer<String, String> header);
 }
