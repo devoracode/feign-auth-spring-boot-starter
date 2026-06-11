@@ -19,6 +19,9 @@ import java.util.concurrent.TimeUnit;
  *
  * <p>Referenced via {@code @FeignClient(configuration = FeignClientConfig.class)}.
  *
+ * <p>Any {@link FeignHeaderInjector} beans registered in the application context are
+ * automatically picked up and applied after the auth header is injected.
+ *
  * @author Wenjie Liu
  * @since 1.0.0
  */
