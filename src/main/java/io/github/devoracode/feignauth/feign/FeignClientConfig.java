@@ -4,10 +4,13 @@ import feign.RequestInterceptor;
 import feign.Retryer;
 import feign.codec.ErrorDecoder;
 import io.github.devoracode.feignauth.oauth2.TokenFetcher;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.util.Assert;
 
+import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -26,16 +29,20 @@ public class FeignClientConfig {
 
 	private final TokenFetcher tokenFetcher;
 
-	public FeignClientConfig(ServiceMatcher serviceMatcher, TokenFetcher tokenFetcher) {
+	private final List<FeignHeaderInjector> headerInjectors;
+
+	public FeignClientConfig(ServiceMatcher serviceMatcher, TokenFetcher tokenFetcher,
+	                         ObjectProvider<List<FeignHeaderInjector>> headerInjectorsProvider) {
 		Assert.notNull(serviceMatcher, "serviceMatcher must not be null");
 		Assert.notNull(tokenFetcher, "tokenFetcher must not be null");
 		this.serviceMatcher = serviceMatcher;
 		this.tokenFetcher = tokenFetcher;
+		this.headerInjectors = headerInjectorsProvider.getIfAvailable(Collections::emptyList);
 	}
 
 	@Bean
 	public RequestInterceptor feignAuthRequestInterceptor() {
-		return new FeignAuthRequestInterceptor(this.serviceMatcher, this.tokenFetcher);
+		return new FeignAuthRequestInterceptor(this.serviceMatcher, this.tokenFetcher, headerInjectors);
 	}
 
 	@Bean
