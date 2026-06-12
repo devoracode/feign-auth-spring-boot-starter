@@ -120,6 +120,16 @@
       "name": "feign.services.*.auth.path-prefixes",
       "type": "java.util.List<java.lang.String>",
       "description": "Request path prefixes routed to this API key service. Omit to define the fallback API key service for the same base URL."
+    },
+    {
+      "name": "feign.services.*.auth.request-headers",
+      "type": "java.util.Map<java.lang.String,java.lang.String>",
+      "description": "Static headers added to every Feign business request for this service."
+    },
+    {
+      "name": "feign.services.*.auth.token-request-headers",
+      "type": "java.util.Map<java.lang.String,java.lang.String>",
+      "description": "Static headers added to the OAuth2 token HTTP request for this service."
     }
   ],
   "hints": [

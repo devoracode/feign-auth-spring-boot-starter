@@ -3,6 +3,8 @@ package io.github.devoracode.feignauth.feign;
 import feign.RequestInterceptor;
 import feign.Retryer;
 import feign.codec.ErrorDecoder;
+import io.github.devoracode.feignauth.header.HeaderCustomizer;
+import io.github.devoracode.feignauth.header.HeaderManager;
 import io.github.devoracode.feignauth.oauth2.TokenFetcher;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
@@ -17,11 +19,6 @@ import java.util.concurrent.TimeUnit;
  * Feign client configuration that registers the authentication request interceptor,
  * error decoder, and retryer.
  *
- * <p>Referenced via {@code @FeignClient(configuration = FeignClientConfig.class)}.
- *
- * <p>Any {@link FeignHeaderInjector} beans registered in the application context are
- * automatically picked up and applied after the auth header is injected.
- *
  * @author Wenjie Liu
  * @since 1.0.0
  */
@@ -32,20 +29,21 @@ public class FeignClientConfig {
 
 	private final TokenFetcher tokenFetcher;
 
-	private final List<FeignHeaderInjector> headerInjectors;
+	private final HeaderManager headerManager;
 
 	public FeignClientConfig(ServiceMatcher serviceMatcher, TokenFetcher tokenFetcher,
-	                         ObjectProvider<List<FeignHeaderInjector>> headerInjectorsProvider) {
+	                         ObjectProvider<List<HeaderCustomizer>> headerCustomizersProvider) {
 		Assert.notNull(serviceMatcher, "serviceMatcher must not be null");
 		Assert.notNull(tokenFetcher, "tokenFetcher must not be null");
 		this.serviceMatcher = serviceMatcher;
 		this.tokenFetcher = tokenFetcher;
-		this.headerInjectors = headerInjectorsProvider.getIfAvailable(Collections::emptyList);
+		List<HeaderCustomizer> customizers = headerCustomizersProvider.getIfAvailable(Collections::emptyList);
+		this.headerManager = new HeaderManager(customizers);
 	}
 
 	@Bean
 	public RequestInterceptor feignAuthRequestInterceptor() {
-		return new FeignAuthRequestInterceptor(this.serviceMatcher, this.tokenFetcher, headerInjectors);
+		return new FeignAuthRequestInterceptor(this.serviceMatcher, this.tokenFetcher, this.headerManager);
 	}
 
 	@Bean

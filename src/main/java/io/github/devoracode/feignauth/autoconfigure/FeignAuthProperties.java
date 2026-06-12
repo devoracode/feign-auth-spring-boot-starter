@@ -12,10 +12,6 @@ import java.util.Map;
 /**
  * Configuration properties for feign-auth-spring-boot-starter.
  *
- * <p>All properties are bound from the {@code feign} prefix in the application
- * configuration file. Each entry in {@link #getServices()} represents a distinct
- * third-party service with its own base URL and authentication configuration.
- *
  * @author Wenjie Liu
  * @since 1.0.0
  */
@@ -89,6 +85,10 @@ public class FeignAuthProperties {
 		private List<Client> clients = new ArrayList<>();
 
 		private List<String> pathPrefixes = new ArrayList<>();
+
+		private Map<String, String> tokenRequestHeaders = new HashMap<>();
+
+		private Map<String, String> requestHeaders = new HashMap<>();
 
 		public String getType() {
 			return this.type;
@@ -192,6 +192,22 @@ public class FeignAuthProperties {
 
 		public void setPathPrefixes(List<String> pathPrefixes) {
 			this.pathPrefixes = pathPrefixes;
+		}
+
+		public Map<String, String> getTokenRequestHeaders() {
+			return tokenRequestHeaders;
+		}
+
+		public void setTokenRequestHeaders(Map<String, String> tokenRequestHeaders) {
+			this.tokenRequestHeaders = tokenRequestHeaders;
+		}
+
+		public Map<String, String> getRequestHeaders() {
+			return requestHeaders;
+		}
+
+		public void setRequestHeaders(Map<String, String> requestHeaders) {
+			this.requestHeaders = requestHeaders;
 		}
 
 		public boolean isOAuth2() {

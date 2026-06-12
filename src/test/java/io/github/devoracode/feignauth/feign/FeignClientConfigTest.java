@@ -60,140 +60,10 @@ class FeignClientConfigTest {
 				.hasMessageContaining("Multiple services matched");
 	}
 
-	// ── FeignHeaderInjector integration ─────────────────────────────────────
-
-	@Test
-	void headerInjectorsAreCalledAfterAuthHeaderForMatchedService() {
-		FeignAuthProperties properties = new FeignAuthProperties();
-		properties.setServices(new LinkedHashMap<>());
-		properties.getServices().put("orders", apiKeyService("https://api.example.com", "sk-key", "/api/orders"));
-
-		RecordingInjector injector = new RecordingInjector(true);
-		FeignAuthRequestInterceptor interceptor = interceptorWithInjectors(properties,
-				Collections.singletonList(injector));
-
-		RequestTemplate template = templateFor("https://api.example.com", "/api/orders/1");
-		interceptor.apply(template);
-
-		assertThat(injector.invokedForService).isEqualTo("orders");
-		assertThat(injector.invokedForPath).isEqualTo("/api/orders/1");
-		assertThat(template.headers()).containsKey("X-Custom");
-		assertThat(template.headers()).containsKey("Authorization");
-	}
-
-	@Test
-	void headerInjectorIsSkippedWhenSupportsReturnsFalse() {
-		FeignAuthProperties properties = new FeignAuthProperties();
-		properties.setServices(new LinkedHashMap<>());
-		properties.getServices().put("orders", apiKeyService("https://api.example.com", "sk-key", "/api/orders"));
-
-		RecordingInjector injector = new RecordingInjector(false);
-		FeignAuthRequestInterceptor interceptor = interceptorWithInjectors(properties,
-				Collections.singletonList(injector));
-
-		RequestTemplate template = templateFor("https://api.example.com", "/api/orders/1");
-		interceptor.apply(template);
-
-		assertThat(injector.invokedForService).isNull();
-		assertThat(template.headers()).doesNotContainKey("X-Custom");
-	}
-
-	@Test
-	void multipleHeaderInjectorsAreAllCalledInOrder() {
-		FeignAuthProperties properties = new FeignAuthProperties();
-		properties.setServices(new LinkedHashMap<>());
-		properties.getServices().put("svc", apiKeyService("https://api.example.com", "sk-key"));
-
-		java.util.List<String> callOrder = new java.util.ArrayList<>();
-		FeignHeaderInjector first = new FeignHeaderInjector() {
-			@Override
-			public boolean supports(String n, FeignAuthProperties.Service s) { return true; }
-			@Override
-			public void inject(String n, String p, RequestTemplate template) {
-				callOrder.add("first");
-				template.header("X-First", "1");
-			}
-		};
-		FeignHeaderInjector second = new FeignHeaderInjector() {
-			@Override
-			public boolean supports(String n, FeignAuthProperties.Service s) { return true; }
-			@Override
-			public void inject(String n, String p, RequestTemplate template) {
-				callOrder.add("second");
-				template.header("X-Second", "2");
-			}
-		};
-
-		FeignAuthRequestInterceptor interceptor = interceptorWithInjectors(properties, Arrays.asList(first, second));
-		RequestTemplate template = templateFor("https://api.example.com", "/api/anything");
-		interceptor.apply(template);
-
-		assertThat(callOrder).containsExactly("first", "second");
-		assertThat(template.headers()).containsKeys("X-First", "X-Second");
-	}
-
-	@Test
-	void headerInjectorNotCalledWhenNoServiceMatches() {
-		FeignAuthProperties properties = new FeignAuthProperties();
-		properties.setServices(new LinkedHashMap<>());
-		properties.getServices().put("other", apiKeyService("https://other.example.com", "sk-key"));
-
-		RecordingInjector injector = new RecordingInjector(true);
-		FeignAuthRequestInterceptor interceptor = interceptorWithInjectors(properties,
-				Collections.singletonList(injector));
-
-		RequestTemplate template = templateFor("https://api.example.com", "/api/orders/1");
-		interceptor.apply(template);
-
-		assertThat(injector.invokedForService).isNull();
-	}
-
-	@Test
-	void interceptorWorksNormallyWithEmptyInjectorList() {
-		FeignAuthProperties properties = new FeignAuthProperties();
-		properties.setServices(new LinkedHashMap<>());
-		properties.getServices().put("orders", apiKeyService("https://api.example.com", "sk-key", "/api/orders"));
-
-		FeignAuthRequestInterceptor interceptor = interceptorWithInjectors(properties, Collections.emptyList());
-		RequestTemplate template = templateFor("https://api.example.com", "/api/orders/1");
-		interceptor.apply(template);
-
-		assertThat(template.headers()).containsKey("Authorization");
-	}
-
-	@Test
-	void headerInjectorExceptionPropagates() {
-		FeignAuthProperties properties = new FeignAuthProperties();
-		properties.setServices(new LinkedHashMap<>());
-		properties.getServices().put("svc", apiKeyService("https://api.example.com", "sk-key"));
-
-		FeignHeaderInjector boom = new FeignHeaderInjector() {
-			@Override
-			public boolean supports(String n, FeignAuthProperties.Service s) { return true; }
-			@Override
-			public void inject(String n, String p, RequestTemplate template) {
-				throw new RuntimeException("injector exploded");
-			}
-		};
-
-		FeignAuthRequestInterceptor interceptor = interceptorWithInjectors(properties,
-				Collections.singletonList(boom));
-		RequestTemplate template = templateFor("https://api.example.com", "/api/anything");
-
-		assertThatThrownBy(() -> interceptor.apply(template))
-				.isInstanceOf(RuntimeException.class)
-				.hasMessage("injector exploded");
-	}
-
 	// ── helpers ──────────────────────────────────────────────────────────────
 
 	private static FeignAuthRequestInterceptor interceptor(FeignAuthProperties properties) {
 		return new FeignAuthRequestInterceptor(new ServiceMatcher(properties), null);
-	}
-
-	private static FeignAuthRequestInterceptor interceptorWithInjectors(FeignAuthProperties properties,
-	                                                                    java.util.List<FeignHeaderInjector> injectors) {
-		return new FeignAuthRequestInterceptor(new ServiceMatcher(properties), null, injectors);
 	}
 
 	private static RequestTemplate templateFor(String baseUrl, String path) {
@@ -213,30 +83,6 @@ class FeignClientConfigTest {
 		auth.setPathPrefixes(Arrays.asList(pathPrefixes));
 		service.setAuth(auth);
 		return service;
-	}
-
-	private static final class RecordingInjector implements FeignHeaderInjector {
-
-		private final boolean supported;
-		String invokedForService;
-		String invokedForPath;
-
-		RecordingInjector(boolean supported) {
-			this.supported = supported;
-		}
-
-		@Override
-		public boolean supports(String serviceName, FeignAuthProperties.Service service) {
-			return this.supported;
-		}
-
-		@Override
-		public void inject(String serviceName, String requestPath, RequestTemplate template) {
-			this.invokedForService = serviceName;
-			this.invokedForPath = requestPath;
-			template.header("X-Custom", "injected");
-		}
-
 	}
 
 }
