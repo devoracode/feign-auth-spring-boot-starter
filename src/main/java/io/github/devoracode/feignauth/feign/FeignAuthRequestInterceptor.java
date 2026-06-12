@@ -4,6 +4,7 @@ import feign.RequestInterceptor;
 import feign.RequestTemplate;
 import io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties;
 import io.github.devoracode.feignauth.exception.FeignAuthConfigurationException;
+import io.github.devoracode.feignauth.header.HeaderManager;
 import io.github.devoracode.feignauth.oauth2.TokenFetcher;
 import io.github.devoracode.feignauth.support.PathUtils;
 import org.apache.commons.logging.Log;
@@ -16,8 +17,8 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * Feign {@link RequestInterceptor} that injects authentication headers based on configured
- * service definitions.
+ * Feign {@link RequestInterceptor} that injects authentication headers and additional
+ * custom headers into every outgoing Feign business request.
  *
  * @author Wenjie Liu
  * @since 1.0.0
@@ -30,17 +31,18 @@ public class FeignAuthRequestInterceptor implements RequestInterceptor {
 
 	private final TokenFetcher tokenFetcher;
 
-	private final List<FeignHeaderInjector> headerInjectors;
+	private final HeaderManager headerManager;
 
 	public FeignAuthRequestInterceptor(ServiceMatcher serviceMatcher, TokenFetcher tokenFetcher) {
-		this(serviceMatcher, tokenFetcher, Collections.emptyList());
+		this(serviceMatcher, tokenFetcher, new HeaderManager());
 	}
 
-	public FeignAuthRequestInterceptor(ServiceMatcher serviceMatcher, TokenFetcher tokenFetcher, List<FeignHeaderInjector> headerInjectors) {
+	public FeignAuthRequestInterceptor(ServiceMatcher serviceMatcher, TokenFetcher tokenFetcher,
+	                                   HeaderManager headerManager) {
         Assert.notNull(serviceMatcher, "serviceMatcher must not be null");
 		this.serviceMatcher = serviceMatcher;
 		this.tokenFetcher = tokenFetcher;
-		this.headerInjectors = (headerInjectors != null) ? headerInjectors : Collections.emptyList();
+		this.headerManager = (headerManager != null) ? headerManager : new HeaderManager();
 	}
 
 	@Override
@@ -92,7 +94,8 @@ public class FeignAuthRequestInterceptor implements RequestInterceptor {
 			applyOAuth2(template, resolved, auth, requestPath);
 		}
 
-		applyHeaderInjectors(template, resolved, requestPath);
+		this.headerManager.applyRequestHeaders(
+				resolved.getServiceName(), resolved.getService(), requestPath, template);
 	}
 
 	/**
@@ -155,25 +158,6 @@ public class FeignAuthRequestInterceptor implements RequestInterceptor {
 			value = value.substring(0, value.length() - 1);
 		}
 		return value;
-	}
-	private void applyHeaderInjectors(RequestTemplate template,
-	                                  ResolvedService resolved,
-	                                  String requestPath) {
-		if (this.headerInjectors.isEmpty()) {
-			return;
-		}
-		for (FeignHeaderInjector injector : this.headerInjectors) {
-			try {
-				if (injector.supports(resolved.getServiceName(), resolved.getService())) {
-					injector.inject(resolved.getServiceName(), requestPath, template);
-				}
-			} catch (Exception ex) {
-				logger.error("FeignAuth: header injector " + injector.getClass().getSimpleName()
-						+ " failed for service='" + resolved.getServiceName() + "': " + ex.getMessage(), ex);
-				// 视业务需要决定是否 rethrow
-				throw ex;
-			}
-		}
 	}
 
 }
