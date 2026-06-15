@@ -30,6 +30,8 @@ public class TokenFetcher {
 	private final OAuth2TokenRequestClient tokenRequestClient;
 
 	private final Map<String, OAuth2AccessToken> tokenCache = new ConcurrentHashMap<>();
+	
+	private final ConcurrentHashMap<String, Object> lockMap = new ConcurrentHashMap<>();
 
 	public TokenFetcher(FeignAuthProperties properties, OAuth2ClientMatcher clientMatcher,
 			OAuth2TokenRequestClient tokenRequestClient) {
@@ -123,8 +125,9 @@ public class TokenFetcher {
 			return cached.getAccessToken();
 		}
 
-		// Use interned cacheKey string as lock object
-		synchronized (cacheKey.intern()) {
+		// Use explicit lock object from map to avoid String.intern() issues
+		Object lock = lockMap.computeIfAbsent(cacheKey, k -> new Object());
+		synchronized (lock) {
 			// Second check: prevent duplicate fetch
 			OAuth2AccessToken cachedAgain = this.tokenCache.get(cacheKey);
 			if (cachedAgain != null && !cachedAgain.isExpired()

@@ -40,7 +40,7 @@ public class OAuth2TokenRequestClient {
 		Assert.notNull(responseParser, "responseParser must not be null");
 		this.restTemplate = restTemplate;
 		this.responseParser = responseParser;
-		this.headerManager = (headerManager != null) ? headerManager : new HeaderManager();
+		this.headerManager = headerManager;
 	}
 
 	/**
