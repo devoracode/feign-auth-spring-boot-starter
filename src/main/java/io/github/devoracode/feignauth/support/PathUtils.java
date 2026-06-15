@@ -81,10 +81,11 @@ public final class PathUtils {
 		if (!StringUtils.hasText(value)) {
 			return value;
 		}
-		while (value.endsWith("/")) {
-			value = value.substring(0, value.length() - 1);
+		int end = value.length();
+		while (end > 0 && value.charAt(end - 1) == '/') {
+			end--;
 		}
-		return value;
+		return end == value.length() ? value : value.substring(0, end);
 	}
 
 }

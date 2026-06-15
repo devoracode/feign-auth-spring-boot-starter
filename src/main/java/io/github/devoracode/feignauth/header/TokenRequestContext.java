@@ -4,6 +4,7 @@ import io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties;
 
 import java.util.Collections;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Immutable context object passed to {@link HeaderCustomizer} for OAuth2 token requests.
@@ -63,6 +64,24 @@ public final class TokenRequestContext {
 	 */
 	public Map<String, String> getParameters() {
 		return this.parameters;
+	}
+
+	@Override
+	public boolean equals(Object o) {
+		if (this == o) {
+			return true;
+		}
+		if (o == null || getClass() != o.getClass()) {
+			return false;
+		}
+		TokenRequestContext that = (TokenRequestContext) o;
+		return Objects.equals(serviceName, that.serviceName) && Objects.equals(service, that.service)
+				&& Objects.equals(client, that.client) && Objects.equals(parameters, that.parameters);
+	}
+
+	@Override
+	public int hashCode() {
+		return Objects.hash(serviceName, service, client, parameters);
 	}
 
 }

@@ -9,6 +9,10 @@ import io.github.devoracode.feignauth.oauth2.OAuth2ClientMatcher;
 import io.github.devoracode.feignauth.oauth2.OAuth2TokenRequestClient;
 import io.github.devoracode.feignauth.oauth2.OAuth2TokenResponseParser;
 import io.github.devoracode.feignauth.oauth2.TokenFetcher;
+import org.apache.http.client.config.RequestConfig;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClientBuilder;
+import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
@@ -18,6 +22,7 @@ import org.springframework.boot.autoconfigure.jackson.JacksonAutoConfiguration;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.Collections;
@@ -37,7 +42,24 @@ public class FeignAuthAutoConfiguration {
 
 	@Bean("feignAuthRestTemplate")
 	public RestTemplate feignAuthRestTemplate() {
-		return new RestTemplate();
+		PoolingHttpClientConnectionManager connectionManager = new PoolingHttpClientConnectionManager();
+		connectionManager.setMaxTotal(200);
+		connectionManager.setDefaultMaxPerRoute(50);
+
+		RequestConfig requestConfig = RequestConfig.custom()
+				.setConnectTimeout(5000)
+				.setConnectionRequestTimeout(5000)
+				.setSocketTimeout(10000)
+				.build();
+
+		CloseableHttpClient httpClient = HttpClientBuilder.create()
+				.setConnectionManager(connectionManager)
+				.setDefaultRequestConfig(requestConfig)
+				.evictIdleConnections(30, java.util.concurrent.TimeUnit.SECONDS)
+				.build();
+
+		HttpComponentsClientHttpRequestFactory factory = new HttpComponentsClientHttpRequestFactory(httpClient);
+		return new RestTemplate(factory);
 	}
 
 	@Bean

@@ -1,9 +1,13 @@
 package io.github.devoracode.feignauth.feign;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import feign.FeignException;
 import feign.Request;
 import feign.Response;
 import feign.RetryableException;
+import feign.Util;
+import io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties;
 import io.github.devoracode.feignauth.exception.FeignAuthTokenException;
 import io.github.devoracode.feignauth.oauth2.TokenFetcher;
 import io.github.devoracode.feignauth.support.PathUtils;
@@ -12,7 +16,9 @@ import org.apache.commons.logging.LogFactory;
 import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
 
+import java.io.IOException;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 
 /**
  * Handles HTTP error responses for Feign requests, including OAuth2 token eviction
@@ -55,9 +61,32 @@ final class FeignAuthStatusHandler {
 		ResolvedService resolved = (request != null)
 				? this.serviceMatcher.match(request.getBaseUrl(), request.getRequestPath()) : null;
 
-		if (isExpiredTokenStatus(status) && isOAuth2Service(resolved)) {
-			return handleExpiredToken(response, resolved, request, status);
+		// Check if need to inspect response body
+		byte[] bodyBytes = null;
+		if (needResponseBodyCheck(resolved, status) && response.body() != null) {
+			try {
+				bodyBytes = Util.toByteArray(response.body().asInputStream());
+				// Create a new Response with the body restored for later use
+				response = Response.builder()
+						.status(response.status())
+						.reason(response.reason())
+						.headers(response.headers())
+						.request(response.request())
+						.body(bodyBytes)
+						.build();
+			} catch (IOException e) {
+				if (logger.isWarnEnabled()) {
+					logger.warn("Failed to read response body for expired token check", e);
+				}
+			}
 		}
+
+		// Check for expired token (HTTP status code or response body status)
+		Integer detectedStatus = detectExpiredTokenStatus(resolved, status, bodyBytes);
+		if (detectedStatus != null && isOAuth2Service(resolved)) {
+			return handleExpiredToken(response, resolved, request, detectedStatus);
+		}
+
 		if (status < 400) {
 			return null;
 		}
@@ -88,6 +117,92 @@ final class FeignAuthStatusHandler {
 				+ ", request failed on the remote side", cause);
 	}
 
+	private boolean needResponseBodyCheck(ResolvedService resolved, int status) {
+		if (resolved == null || resolved.getService() == null || resolved.getService().getAuth() == null) {
+			return false;
+		}
+		FeignAuthProperties.Auth auth = resolved.getService().getAuth();
+		// Only check response body if:
+		// 1. HTTP status is not already an expired token status
+		// 2. This is an OAuth2 service
+		// 3. responseStatusField is explicitly configured
+		return !isExpiredTokenStatus(resolved, status) && isOAuth2Service(resolved) 
+				&& StringUtils.hasText(auth.getResponseStatusField());
+	}
+
+	private Integer detectExpiredTokenStatus(ResolvedService resolved, int status, byte[] bodyBytes) {
+		// First check HTTP status code
+		if (isExpiredTokenStatus(resolved, status)) {
+			return status;
+		}
+
+		// Then check response body status if body is available
+		if (bodyBytes == null || bodyBytes.length == 0) {
+			return null;
+		}
+
+		if (resolved == null || resolved.getService() == null || resolved.getService().getAuth() == null) {
+			return null;
+		}
+
+		FeignAuthProperties.Auth auth = resolved.getService().getAuth();
+		String responseStatusField = auth.getResponseStatusField();
+		if (!StringUtils.hasText(responseStatusField)) {
+			return null;
+		}
+
+		try {
+			String body = new String(bodyBytes, StandardCharsets.UTF_8);
+			Integer responseStatus = parseJsonField(body, responseStatusField);
+			if (responseStatus != null && auth.isExpiredTokenStatus(responseStatus)) {
+				if (logger.isDebugEnabled()) {
+					logger.debug("FeignAuth: detected expired token status " + responseStatus + " in response body");
+				}
+				return responseStatus;
+			}
+		} catch (Exception e) {
+			if (logger.isDebugEnabled()) {
+				logger.debug("Failed to parse response body for expired token check", e);
+			}
+		}
+
+		return null;
+	}
+
+	private Integer parseJsonField(String jsonBody, String fieldPath) {
+		if (!StringUtils.hasText(jsonBody) || !StringUtils.hasText(fieldPath)) {
+			return null;
+		}
+
+		try {
+			ObjectMapper objectMapper = new ObjectMapper();
+			JsonNode root = objectMapper.readTree(jsonBody);
+			String[] fields = fieldPath.split("\\.");
+			JsonNode current = root;
+
+			for (String field : fields) {
+				if (current == null || current.isNull()) {
+					return null;
+				}
+				current = current.get(field);
+			}
+
+			if (current != null && !current.isNull()) {
+				if (current.isNumber()) {
+					return current.asInt();
+				} else if (current.isTextual()) {
+					return Integer.parseInt(current.asText());
+				}
+			}
+		} catch (Exception e) {
+			if (logger.isDebugEnabled()) {
+				logger.debug("Failed to parse JSON field: " + fieldPath, e);
+			}
+		}
+
+		return null;
+	}
+
 	private Exception handleExpiredToken(Response response, ResolvedService resolved, ResolvedRequest request,
 			int status) {
 		boolean evicted = this.tokenFetcher.invalidateToken(resolved.getServiceName(), request.getRequestPath());
@@ -100,8 +215,11 @@ final class FeignAuthStatusHandler {
 				response.request());
 	}
 
-	private static boolean isExpiredTokenStatus(int status) {
-		return status == 421 || status == 423;
+	private static boolean isExpiredTokenStatus(ResolvedService resolved, int status) {
+		if (resolved == null || resolved.getService() == null || resolved.getService().getAuth() == null) {
+			return false;
+		}
+		return resolved.getService().getAuth().isExpiredTokenStatus(status);
 	}
 
 	private static boolean isOAuth2Service(ResolvedService resolved) {

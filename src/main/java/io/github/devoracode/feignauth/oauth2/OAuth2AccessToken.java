@@ -1,5 +1,7 @@
 package io.github.devoracode.feignauth.oauth2;
 
+import java.util.Objects;
+
 /**
  * Cached OAuth2 access token with an absolute expiry timestamp.
  *
@@ -30,6 +32,23 @@ public class OAuth2AccessToken {
 
 	public boolean isExpired() {
 		return System.currentTimeMillis() >= this.expireAt;
+	}
+
+	@Override
+	public boolean equals(Object o) {
+		if (this == o) {
+			return true;
+		}
+		if (o == null || getClass() != o.getClass()) {
+			return false;
+		}
+		OAuth2AccessToken that = (OAuth2AccessToken) o;
+		return expireAt == that.expireAt && Objects.equals(accessToken, that.accessToken);
+	}
+
+	@Override
+	public int hashCode() {
+		return Objects.hash(accessToken, expireAt);
 	}
 
 }
