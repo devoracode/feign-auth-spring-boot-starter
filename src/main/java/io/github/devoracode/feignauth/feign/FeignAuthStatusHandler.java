@@ -35,11 +35,15 @@ final class FeignAuthStatusHandler {
 
 	private final TokenFetcher tokenFetcher;
 
-	FeignAuthStatusHandler(ServiceMatcher serviceMatcher, TokenFetcher tokenFetcher) {
+	private final ObjectMapper objectMapper;
+
+	FeignAuthStatusHandler(ServiceMatcher serviceMatcher, TokenFetcher tokenFetcher, ObjectMapper objectMapper) {
 		Assert.notNull(serviceMatcher, "serviceMatcher must not be null");
 		Assert.notNull(tokenFetcher, "tokenFetcher must not be null");
+		Assert.notNull(objectMapper, "objectMapper must not be null");
 		this.serviceMatcher = serviceMatcher;
 		this.tokenFetcher = tokenFetcher;
+		this.objectMapper = objectMapper;
 	}
 
 	/**
@@ -67,11 +71,7 @@ final class FeignAuthStatusHandler {
 			try {
 				bodyBytes = Util.toByteArray(response.body().asInputStream());
 				// Create a new Response with the body restored for later use
-				response = Response.builder()
-						.status(response.status())
-						.reason(response.reason())
-						.headers(response.headers())
-						.request(response.request())
+				response = response.toBuilder()
 						.body(bodyBytes)
 						.build();
 			} catch (IOException e) {
@@ -175,8 +175,7 @@ final class FeignAuthStatusHandler {
 		}
 
 		try {
-			ObjectMapper objectMapper = new ObjectMapper();
-			JsonNode root = objectMapper.readTree(jsonBody);
+			JsonNode root = this.objectMapper.readTree(jsonBody);
 			String[] fields = fieldPath.split("\\.");
 			JsonNode current = root;
 

@@ -25,6 +25,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class FeignAuthErrorDecoderTest {
 
+	private final ObjectMapper objectMapper = new ObjectMapper();
+
 	@Test
 	void evictsOAuth2TokenAndRetriesWhenRemoteServiceReturns423() {
 		FeignAuthProperties properties = new FeignAuthProperties();
@@ -34,7 +36,7 @@ class FeignAuthErrorDecoderTest {
 
 		CountingTokenRequestClient tokenRequestClient = new CountingTokenRequestClient();
 		TokenFetcher tokenFetcher = new TokenFetcher(properties, new OAuth2ClientMatcher(), tokenRequestClient);
-		FeignAuthErrorDecoder decoder = new FeignAuthErrorDecoder(new ServiceMatcher(properties), tokenFetcher);
+		FeignAuthErrorDecoder decoder = new FeignAuthErrorDecoder(new ServiceMatcher(properties), tokenFetcher, objectMapper);
 
 		assertThat(tokenFetcher.getToken("measure", "/api/measure/read/1")).isEqualTo("token-1");
 
@@ -55,7 +57,7 @@ class FeignAuthErrorDecoderTest {
 
 		CountingTokenRequestClient tokenRequestClient = new CountingTokenRequestClient();
 		TokenFetcher tokenFetcher = new TokenFetcher(properties, new OAuth2ClientMatcher(), tokenRequestClient);
-		FeignAuthErrorDecoder decoder = new FeignAuthErrorDecoder(new ServiceMatcher(properties), tokenFetcher);
+		FeignAuthErrorDecoder decoder = new FeignAuthErrorDecoder(new ServiceMatcher(properties), tokenFetcher, objectMapper);
 
 		Exception exception = decoder.decode("MeasureClient#getReading",
 				response(401, "https://api.service-a.com/api/measure/read/1"));

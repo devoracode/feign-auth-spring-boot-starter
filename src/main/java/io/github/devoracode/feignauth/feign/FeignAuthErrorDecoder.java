@@ -1,5 +1,6 @@
 package io.github.devoracode.feignauth.feign;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import feign.Response;
 import feign.codec.ErrorDecoder;
 import io.github.devoracode.feignauth.oauth2.TokenFetcher;
@@ -17,10 +18,11 @@ public class FeignAuthErrorDecoder implements ErrorDecoder {
 
 	private final ErrorDecoder defaultErrorDecoder = new Default();
 
-	public FeignAuthErrorDecoder(ServiceMatcher serviceMatcher, TokenFetcher tokenFetcher) {
+	public FeignAuthErrorDecoder(ServiceMatcher serviceMatcher, TokenFetcher tokenFetcher, ObjectMapper objectMapper) {
 		Assert.notNull(serviceMatcher, "serviceMatcher must not be null");
 		Assert.notNull(tokenFetcher, "tokenFetcher must not be null");
-		this.statusHandler = new FeignAuthStatusHandler(serviceMatcher, tokenFetcher);
+		Assert.notNull(objectMapper, "objectMapper must not be null");
+		this.statusHandler = new FeignAuthStatusHandler(serviceMatcher, tokenFetcher, objectMapper);
 	}
 
 	@Override

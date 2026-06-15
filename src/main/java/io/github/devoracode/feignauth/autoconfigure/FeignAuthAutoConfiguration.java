@@ -80,6 +80,13 @@ public class FeignAuthAutoConfiguration {
 		return new ObjectMapper();
 	}
 
+	@Bean
+	@ConditionalOnMissingBean
+	public HeaderManager headerManager(ObjectProvider<List<HeaderCustomizer>> customizersProvider) {
+		List<HeaderCustomizer> customizers = customizersProvider.getIfAvailable(Collections::emptyList);
+		return new HeaderManager(customizers);
+	}
+
 	@Configuration(proxyBeanMethods = false)
 	@ConditionalOnMissingBean(TokenFetcher.class)
 	static class TokenFetcherConfiguration {
@@ -87,11 +94,8 @@ public class FeignAuthAutoConfiguration {
 		@Bean
 		TokenFetcher tokenFetcher(FeignAuthProperties properties, OAuth2ClientMatcher clientMatcher,
 				@Qualifier("feignAuthRestTemplate") RestTemplate restTemplate, ObjectMapper objectMapper,
-				                  ObjectProvider<List<HeaderCustomizer>> headerCustomizersProvider) {
+				HeaderManager headerManager) {
 			OAuth2TokenResponseParser responseParser = new OAuth2TokenResponseParser(objectMapper);
-			List<HeaderCustomizer> customizers =
-					headerCustomizersProvider.getIfAvailable(Collections::emptyList);
-			HeaderManager headerManager = new HeaderManager(customizers);
 			OAuth2TokenRequestClient tokenRequestClient = new OAuth2TokenRequestClient(restTemplate,
 					responseParser, headerManager);
 			return new TokenFetcher(properties, clientMatcher, tokenRequestClient);

@@ -31,10 +31,6 @@ public class FeignAuthRequestInterceptor implements RequestInterceptor {
 
 	private final HeaderManager headerManager;
 
-	public FeignAuthRequestInterceptor(ServiceMatcher serviceMatcher, TokenFetcher tokenFetcher) {
-		this(serviceMatcher, tokenFetcher, new HeaderManager());
-	}
-
 	public FeignAuthRequestInterceptor(ServiceMatcher serviceMatcher, TokenFetcher tokenFetcher,
 			HeaderManager headerManager) {
 		Assert.notNull(serviceMatcher, "serviceMatcher must not be null");
