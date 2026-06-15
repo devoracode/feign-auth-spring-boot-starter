@@ -13,8 +13,6 @@ import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
 
 import java.net.URI;
-import java.util.Collections;
-import java.util.List;
 
 /**
  * Feign {@link RequestInterceptor} that injects authentication headers and additional
@@ -38,11 +36,12 @@ public class FeignAuthRequestInterceptor implements RequestInterceptor {
 	}
 
 	public FeignAuthRequestInterceptor(ServiceMatcher serviceMatcher, TokenFetcher tokenFetcher,
-	                                   HeaderManager headerManager) {
-        Assert.notNull(serviceMatcher, "serviceMatcher must not be null");
+			HeaderManager headerManager) {
+		Assert.notNull(serviceMatcher, "serviceMatcher must not be null");
+		Assert.notNull(headerManager, "headerManager must not be null");
 		this.serviceMatcher = serviceMatcher;
 		this.tokenFetcher = tokenFetcher;
-		this.headerManager = (headerManager != null) ? headerManager : new HeaderManager();
+		this.headerManager = headerManager;
 	}
 
 	@Override

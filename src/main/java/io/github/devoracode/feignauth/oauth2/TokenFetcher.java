@@ -12,7 +12,6 @@ import org.springframework.web.client.RestTemplate;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * Provides cached OAuth2 access tokens for configured Feign services.
@@ -31,8 +30,6 @@ public class TokenFetcher {
 	private final OAuth2TokenRequestClient tokenRequestClient;
 
 	private final Map<String, OAuth2AccessToken> tokenCache = new ConcurrentHashMap<>();
-
-	private final ConcurrentHashMap<String, ReentrantLock> tokenLocks = new ConcurrentHashMap<>();
 
 	public TokenFetcher(FeignAuthProperties properties, OAuth2ClientMatcher clientMatcher,
 			OAuth2TokenRequestClient tokenRequestClient) {
@@ -119,13 +116,16 @@ public class TokenFetcher {
 	private String getCachedOrFetch(String serviceName, FeignAuthProperties.Service service,
 			FeignAuthProperties.Client client) {
 		String cacheKey = buildCacheKey(serviceName, client);
+		
+		// First check: lock-free fast path
 		OAuth2AccessToken cached = this.tokenCache.get(cacheKey);
 		if (cached != null && !cached.isExpired() && StringUtils.hasText(cached.getAccessToken())) {
 			return cached.getAccessToken();
 		}
-		ReentrantLock lock = tokenLocks.computeIfAbsent(cacheKey, k -> new ReentrantLock());
-		lock.lock();
-		try {
+
+		// Use interned cacheKey string as lock object
+		synchronized (cacheKey.intern()) {
+			// Second check: prevent duplicate fetch
 			OAuth2AccessToken cachedAgain = this.tokenCache.get(cacheKey);
 			if (cachedAgain != null && !cachedAgain.isExpired()
 					&& StringUtils.hasText(cachedAgain.getAccessToken())) {
@@ -143,11 +143,6 @@ public class TokenFetcher {
 						+ client.getId() + "', expireAt=" + refreshed.getExpireAt());
 			}
 			return refreshed.getAccessToken();
-		} finally {
-			lock.unlock();
-			if (!lock.hasQueuedThreads()) {
-				tokenLocks.remove(cacheKey, lock);
-			}
 		}
 	}
 

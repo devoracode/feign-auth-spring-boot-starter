@@ -67,6 +67,16 @@
       "defaultValue": 60
     },
     {
+      "name": "feign.services.*.auth.expired-token-statuses",
+      "type": "java.util.List<java.lang.Integer>",
+      "description": "HTTP status codes that trigger token refresh retry. Defaults to [410, 421, 423]."
+    },
+    {
+      "name": "feign.services.*.auth.response-status-field",
+      "type": "java.lang.String",
+      "description": "JSON field path in response body to check for expired token status. Supports dot-separated paths like 'data.code'. When not set, only HTTP status codes are used for expired token detection."
+    },
+    {
       "name": "feign.services.*.auth.token-field",
       "type": "java.lang.String",
       "description": "Dot-separated JSON path to extract the access token from the token response, e.g. data.accessToken. When blank, the built-in auto-detection (access_token / accessToken / token) is used."

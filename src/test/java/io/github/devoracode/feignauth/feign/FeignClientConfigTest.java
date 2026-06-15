@@ -7,7 +7,6 @@ import io.github.devoracode.feignauth.exception.FeignAuthConfigurationException;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.LinkedHashMap;
 
 import static org.assertj.core.api.Assertions.assertThat;

@@ -90,6 +90,26 @@ public class FeignAuthProperties {
 
 		private Map<String, String> requestHeaders = new HashMap<>();
 
+		private List<Integer> expiredTokenStatuses = new ArrayList<>();
+
+		private String responseStatusField;
+
+		public String getResponseStatusField() {
+			return this.responseStatusField;
+		}
+
+		public void setResponseStatusField(String responseStatusField) {
+			this.responseStatusField = responseStatusField;
+		}
+
+		public List<Integer> getExpiredTokenStatuses() {
+			return this.expiredTokenStatuses;
+		}
+
+		public void setExpiredTokenStatuses(List<Integer> expiredTokenStatuses) {
+			this.expiredTokenStatuses = expiredTokenStatuses;
+		}
+
 		public String getType() {
 			return this.type;
 		}
@@ -238,6 +258,13 @@ public class FeignAuthProperties {
 				}
 			}
 			return false;
+		}
+
+		public boolean isExpiredTokenStatus(int status) {
+			if (this.expiredTokenStatuses != null && !this.expiredTokenStatuses.isEmpty()) {
+				return this.expiredTokenStatuses.contains(status);
+			}
+			return status == 410 || status == 421 || status == 423;
 		}
 
 	}
