@@ -4,6 +4,7 @@ import feign.RequestInterceptor;
 import feign.RequestTemplate;
 import io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties;
 import io.github.devoracode.feignauth.exception.FeignAuthConfigurationException;
+import io.github.devoracode.feignauth.exception.FeignAuthTokenException;
 import io.github.devoracode.feignauth.header.HeaderManager;
 import io.github.devoracode.feignauth.oauth2.TokenFetcher;
 import io.github.devoracode.feignauth.support.PathUtils;
@@ -125,11 +126,12 @@ public class FeignAuthRequestInterceptor implements RequestInterceptor {
 		try {
 			token = this.tokenFetcher.getToken(resolved.getServiceName(), requestPath);
 		} catch (Exception ex) {
+			String errorMessage = "FeignAuth [oauth2] failed to obtain token for service='" 
+					+ resolved.getServiceName() + "', path=" + requestPath;
 			if (logger.isErrorEnabled()) {
-				logger.error("FeignAuth [oauth2] failed to obtain token for service='" + resolved.getServiceName()
-						+ "', path=" + requestPath + ": " + ex.getMessage(), ex);
+				logger.error(errorMessage + ": " + ex.getMessage(), ex);
 			}
-			throw ex;
+			throw new FeignAuthTokenException(errorMessage, ex);
 		}
 		String headerName = auth.resolveHeaderName();
 		String headerValue = prefix(auth) + token;
