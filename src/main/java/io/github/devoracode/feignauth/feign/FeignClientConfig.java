@@ -1,18 +1,15 @@
 package io.github.devoracode.feignauth.feign;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import feign.RequestInterceptor;
 import feign.Retryer;
 import feign.codec.ErrorDecoder;
-import io.github.devoracode.feignauth.header.HeaderCustomizer;
 import io.github.devoracode.feignauth.header.HeaderManager;
 import io.github.devoracode.feignauth.oauth2.TokenFetcher;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.util.Assert;
 
-import java.util.Collections;
-import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -31,14 +28,18 @@ public class FeignClientConfig {
 
 	private final HeaderManager headerManager;
 
+	private final ObjectMapper objectMapper;
+
 	public FeignClientConfig(ServiceMatcher serviceMatcher, TokenFetcher tokenFetcher,
-	                         ObjectProvider<List<HeaderCustomizer>> headerCustomizersProvider) {
+	                         HeaderManager headerManager, ObjectMapper objectMapper) {
 		Assert.notNull(serviceMatcher, "serviceMatcher must not be null");
 		Assert.notNull(tokenFetcher, "tokenFetcher must not be null");
+		Assert.notNull(headerManager, "headerManager must not be null");
+		Assert.notNull(objectMapper, "objectMapper must not be null");
 		this.serviceMatcher = serviceMatcher;
 		this.tokenFetcher = tokenFetcher;
-		List<HeaderCustomizer> customizers = headerCustomizersProvider.getIfAvailable(Collections::emptyList);
-		this.headerManager = new HeaderManager(customizers);
+		this.headerManager = headerManager;
+		this.objectMapper = objectMapper;
 	}
 
 	@Bean
@@ -48,7 +49,7 @@ public class FeignClientConfig {
 
 	@Bean
 	public ErrorDecoder feignAuthErrorDecoder() {
-		return new FeignAuthErrorDecoder(this.serviceMatcher, this.tokenFetcher);
+		return new FeignAuthErrorDecoder(this.serviceMatcher, this.tokenFetcher, this.objectMapper);
 	}
 
 	@Bean

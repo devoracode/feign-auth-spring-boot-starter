@@ -4,6 +4,7 @@ import feign.RequestTemplate;
 import feign.Target;
 import io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties;
 import io.github.devoracode.feignauth.exception.FeignAuthConfigurationException;
+import io.github.devoracode.feignauth.header.HeaderManager;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
@@ -62,7 +63,7 @@ class FeignClientConfigTest {
 	// ── helpers ──────────────────────────────────────────────────────────────
 
 	private static FeignAuthRequestInterceptor interceptor(FeignAuthProperties properties) {
-		return new FeignAuthRequestInterceptor(new ServiceMatcher(properties), null);
+		return new FeignAuthRequestInterceptor(new ServiceMatcher(properties), null, new HeaderManager());
 	}
 
 	private static RequestTemplate templateFor(String baseUrl, String path) {
