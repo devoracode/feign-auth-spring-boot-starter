@@ -103,7 +103,6 @@ public class FeignAuthAutoConfiguration {
 	@ConditionalOnProperty(prefix = "feign.auth.cache", name = "provider", havingValue = "local",
 			matchIfMissing = true)
 	public TokenStore tokenStore() {
-
 		return new LocalTokenStore();
 	}
 
@@ -114,9 +113,7 @@ public class FeignAuthAutoConfiguration {
 	@ConditionalOnProperty(prefix = "feign.auth.cache", name = "provider", havingValue = "redis")
 	public TokenStore redisTokenStore(RedisTemplate<Object, Object> redisTemplate,
 			FeignAuthProperties properties) {
-		return new RedisTokenStore(redisTemplate, properties.getAuth()
-						.getCache()
-						.getRedis());
+		return new RedisTokenStore(redisTemplate, properties.getAuth().getCache().getRedis());
 	}
 
 	@Bean
@@ -124,7 +121,6 @@ public class FeignAuthAutoConfiguration {
 	@ConditionalOnProperty(prefix = "feign.auth.cache", name = "provider",
 			havingValue = "local", matchIfMissing = true)
 	public LockProvider lockProvider() {
-
 		return new LocalLockProvider();
 	}
 
@@ -134,8 +130,8 @@ public class FeignAuthAutoConfiguration {
 	@ConditionalOnBean(StringRedisTemplate.class)
 	@ConditionalOnProperty(prefix = "feign.auth.cache",
 			name = "provider", havingValue = "redis")
-	public LockProvider redisLockProvider(StringRedisTemplate redisTemplate, FeignAuthProperties.Redis redis) {
-		return new RedisLockProvider(redisTemplate, redis);
+	public LockProvider redisLockProvider(StringRedisTemplate redisTemplate, FeignAuthProperties properties) {
+		return new RedisLockProvider(redisTemplate, properties.getAuth().getCache().getRedis());
 	}
 
 	@Configuration(proxyBeanMethods = false)
