@@ -14,12 +14,12 @@ package io.github.devoracode.feignauth.exception;
  */
 public class FeignAuthConfigurationException extends RuntimeException {
 
-	public FeignAuthConfigurationException(String message) {
-		super(message);
-	}
+    public FeignAuthConfigurationException(String message) {
+        super(message);
+    }
 
-	public FeignAuthConfigurationException(String message, Throwable cause) {
-		super(message, cause);
-	}
+    public FeignAuthConfigurationException(String message, Throwable cause) {
+        super(message, cause);
+    }
 
 }

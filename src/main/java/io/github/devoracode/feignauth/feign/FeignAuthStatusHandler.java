@@ -126,7 +126,7 @@ final class FeignAuthStatusHandler {
 		// 1. HTTP status is not already an expired token status
 		// 2. This is an OAuth2 service
 		// 3. responseStatusField is explicitly configured
-		return !isExpiredTokenStatus(resolved, status) && isOAuth2Service(resolved) 
+		return !isExpiredTokenStatus(resolved, status) && isOAuth2Service(resolved)
 				&& StringUtils.hasText(auth.getResponseStatusField());
 	}
 

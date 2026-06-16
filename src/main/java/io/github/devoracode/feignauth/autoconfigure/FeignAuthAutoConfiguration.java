@@ -47,107 +47,107 @@ import java.util.List;
  */
 @Configuration(proxyBeanMethods = false)
 @ConditionalOnClass(RequestInterceptor.class)
-@AutoConfigureAfter(value = { JacksonAutoConfiguration.class, RedisAutoConfiguration.class })
+@AutoConfigureAfter(value = {JacksonAutoConfiguration.class, RedisAutoConfiguration.class})
 @EnableConfigurationProperties(FeignAuthProperties.class)
 public class FeignAuthAutoConfiguration {
 
-	@Bean("feignAuthRestTemplate")
-	public RestTemplate feignAuthRestTemplate() {
-		PoolingHttpClientConnectionManager connectionManager = new PoolingHttpClientConnectionManager();
-		connectionManager.setMaxTotal(200);
-		connectionManager.setDefaultMaxPerRoute(50);
+    @Bean("feignAuthRestTemplate")
+    public RestTemplate feignAuthRestTemplate() {
+        PoolingHttpClientConnectionManager connectionManager = new PoolingHttpClientConnectionManager();
+        connectionManager.setMaxTotal(200);
+        connectionManager.setDefaultMaxPerRoute(50);
 
-		RequestConfig requestConfig = RequestConfig.custom()
-				.setConnectTimeout(5000)
-				.setConnectionRequestTimeout(5000)
-				.setSocketTimeout(10000)
-				.build();
+        RequestConfig requestConfig = RequestConfig.custom()
+            .setConnectTimeout(5000)
+            .setConnectionRequestTimeout(5000)
+            .setSocketTimeout(10000)
+            .build();
 
-		CloseableHttpClient httpClient = HttpClientBuilder.create()
-				.setConnectionManager(connectionManager)
-				.setDefaultRequestConfig(requestConfig)
-				.evictIdleConnections(30, java.util.concurrent.TimeUnit.SECONDS)
-				.build();
+        CloseableHttpClient httpClient = HttpClientBuilder.create()
+            .setConnectionManager(connectionManager)
+            .setDefaultRequestConfig(requestConfig)
+            .evictIdleConnections(30, java.util.concurrent.TimeUnit.SECONDS)
+            .build();
 
-		HttpComponentsClientHttpRequestFactory factory = new HttpComponentsClientHttpRequestFactory(httpClient);
-		return new RestTemplate(factory);
-	}
+        HttpComponentsClientHttpRequestFactory factory = new HttpComponentsClientHttpRequestFactory(httpClient);
+        return new RestTemplate(factory);
+    }
 
-	@Bean
-	@ConditionalOnMissingBean
-	public ServiceMatcher serviceMatcher(FeignAuthProperties properties) {
-		return new ServiceMatcher(properties);
-	}
+    @Bean
+    @ConditionalOnMissingBean
+    public ServiceMatcher serviceMatcher(FeignAuthProperties properties) {
+        return new ServiceMatcher(properties);
+    }
 
-	@Bean
-	@ConditionalOnMissingBean
-	public OAuth2ClientMatcher oAuth2ClientMatcher() {
-		return new OAuth2ClientMatcher();
-	}
+    @Bean
+    @ConditionalOnMissingBean
+    public OAuth2ClientMatcher oAuth2ClientMatcher() {
+        return new OAuth2ClientMatcher();
+    }
 
-	@Bean
-	@ConditionalOnMissingBean
-	public ObjectMapper objectMapper() {
-		return new ObjectMapper();
-	}
+    @Bean
+    @ConditionalOnMissingBean
+    public ObjectMapper objectMapper() {
+        return new ObjectMapper();
+    }
 
-	@Bean
-	@ConditionalOnMissingBean
-	public HeaderManager headerManager(ObjectProvider<List<HeaderCustomizer>> customizersProvider) {
-		List<HeaderCustomizer> customizers = customizersProvider.getIfAvailable(Collections::emptyList);
-		return new HeaderManager(customizers);
-	}
+    @Bean
+    @ConditionalOnMissingBean
+    public HeaderManager headerManager(ObjectProvider<List<HeaderCustomizer>> customizersProvider) {
+        List<HeaderCustomizer> customizers = customizersProvider.getIfAvailable(Collections::emptyList);
+        return new HeaderManager(customizers);
+    }
 
-	@Bean
-	@ConditionalOnMissingBean(TokenStore.class)
-	@ConditionalOnProperty(prefix = "feign.auth.cache", name = "provider", havingValue = "local",
-			matchIfMissing = true)
-	public TokenStore tokenStore() {
-		return new LocalTokenStore();
-	}
+    @Bean
+    @ConditionalOnMissingBean(TokenStore.class)
+    @ConditionalOnProperty(prefix = "feign.auth.cache", name = "provider", havingValue = "local",
+        matchIfMissing = true)
+    public TokenStore tokenStore() {
+        return new LocalTokenStore();
+    }
 
-	@Bean
-	@ConditionalOnMissingBean(TokenStore.class)
-	@ConditionalOnClass(RedisTemplate.class)
-	@ConditionalOnBean(RedisTemplate.class)
-	@ConditionalOnProperty(prefix = "feign.auth.cache", name = "provider", havingValue = "redis")
-	public TokenStore redisTokenStore(RedisTemplate<Object, Object> redisTemplate,
-			FeignAuthProperties properties) {
-		return new RedisTokenStore(redisTemplate, properties.getAuth().getCache().getRedis());
-	}
+    @Bean
+    @ConditionalOnMissingBean(TokenStore.class)
+    @ConditionalOnClass(RedisTemplate.class)
+    @ConditionalOnBean(RedisTemplate.class)
+    @ConditionalOnProperty(prefix = "feign.auth.cache", name = "provider", havingValue = "redis")
+    public TokenStore redisTokenStore(RedisTemplate<Object, Object> redisTemplate,
+                                      FeignAuthProperties properties) {
+        return new RedisTokenStore(redisTemplate, properties.getAuth().getCache().getRedis());
+    }
 
-	@Bean
-	@ConditionalOnMissingBean(LockProvider.class)
-	@ConditionalOnProperty(prefix = "feign.auth.cache", name = "provider",
-			havingValue = "local", matchIfMissing = true)
-	public LockProvider lockProvider() {
-		return new LocalLockProvider();
-	}
+    @Bean
+    @ConditionalOnMissingBean(LockProvider.class)
+    @ConditionalOnProperty(prefix = "feign.auth.cache", name = "provider",
+        havingValue = "local", matchIfMissing = true)
+    public LockProvider lockProvider() {
+        return new LocalLockProvider();
+    }
 
-	@Bean
-	@ConditionalOnMissingBean(LockProvider.class)
-	@ConditionalOnClass(StringRedisTemplate.class)
-	@ConditionalOnBean(StringRedisTemplate.class)
-	@ConditionalOnProperty(prefix = "feign.auth.cache",
-			name = "provider", havingValue = "redis")
-	public LockProvider redisLockProvider(StringRedisTemplate redisTemplate, FeignAuthProperties properties) {
-		return new RedisLockProvider(redisTemplate, properties.getAuth().getCache().getRedis());
-	}
+    @Bean
+    @ConditionalOnMissingBean(LockProvider.class)
+    @ConditionalOnClass(StringRedisTemplate.class)
+    @ConditionalOnBean(StringRedisTemplate.class)
+    @ConditionalOnProperty(prefix = "feign.auth.cache",
+        name = "provider", havingValue = "redis")
+    public LockProvider redisLockProvider(StringRedisTemplate redisTemplate, FeignAuthProperties properties) {
+        return new RedisLockProvider(redisTemplate, properties.getAuth().getCache().getRedis());
+    }
 
-	@Configuration(proxyBeanMethods = false)
-	@ConditionalOnMissingBean(TokenFetcher.class)
-	static class TokenFetcherConfiguration {
+    @Configuration(proxyBeanMethods = false)
+    @ConditionalOnMissingBean(TokenFetcher.class)
+    static class TokenFetcherConfiguration {
 
-		@Bean
-		TokenFetcher tokenFetcher(FeignAuthProperties properties, OAuth2ClientMatcher clientMatcher,
-				@Qualifier("feignAuthRestTemplate") RestTemplate restTemplate, ObjectMapper objectMapper,
-				HeaderManager headerManager, TokenStore tokenStore, LockProvider lockProvider) {
-			OAuth2TokenResponseParser responseParser = new OAuth2TokenResponseParser(objectMapper);
-			OAuth2TokenRequestClient tokenRequestClient = new OAuth2TokenRequestClient(restTemplate,
-					responseParser, headerManager);
-			return new TokenFetcher(properties, clientMatcher, tokenRequestClient, tokenStore, lockProvider);
-		}
+        @Bean
+        TokenFetcher tokenFetcher(FeignAuthProperties properties, OAuth2ClientMatcher clientMatcher,
+                                  @Qualifier("feignAuthRestTemplate") RestTemplate restTemplate, ObjectMapper objectMapper,
+                                  HeaderManager headerManager, TokenStore tokenStore, LockProvider lockProvider) {
+            OAuth2TokenResponseParser responseParser = new OAuth2TokenResponseParser(objectMapper);
+            OAuth2TokenRequestClient tokenRequestClient = new OAuth2TokenRequestClient(restTemplate,
+                responseParser, headerManager);
+            return new TokenFetcher(properties, clientMatcher, tokenRequestClient, tokenStore, lockProvider);
+        }
 
-	}
+    }
 
 }

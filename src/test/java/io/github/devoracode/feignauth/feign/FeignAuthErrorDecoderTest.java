@@ -6,7 +6,6 @@ import feign.RequestTemplate;
 import feign.Response;
 import feign.RetryableException;
 import io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties;
-import io.github.devoracode.feignauth.exception.FeignAuthTokenException;
 import io.github.devoracode.feignauth.header.HeaderManager;
 import io.github.devoracode.feignauth.oauth2.*;
 import io.github.devoracode.feignauth.oauth2.lock.LocalLockProvider;
