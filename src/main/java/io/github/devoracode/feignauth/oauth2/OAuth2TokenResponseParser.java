@@ -61,6 +61,7 @@ public class OAuth2TokenResponseParser {
 			OAuth2AccessToken accessToken = new OAuth2AccessToken();
 			accessToken.setAccessToken(token);
 			accessToken.setExpireAt(System.currentTimeMillis() + refreshIn * 1000L);
+			accessToken.setTtl(refreshIn);
 			return accessToken;
 		}
 		catch (FeignAuthTokenException ex) {

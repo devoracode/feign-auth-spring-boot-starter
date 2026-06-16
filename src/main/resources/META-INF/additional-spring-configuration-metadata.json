@@ -9,6 +9,11 @@
       "name": "feign.services",
       "type": "java.util.Map<java.lang.String,io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties$Service>",
       "sourceType": "io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties"
+    },
+    {
+      "name": "feign.auth.cache",
+      "type": "io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties$Cache",
+      "sourceType": "io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties"
     }
   ],
   "properties": [
@@ -140,6 +145,18 @@
       "name": "feign.services.*.auth.token-request-headers",
       "type": "java.util.Map<java.lang.String,java.lang.String>",
       "description": "Static headers added to the OAuth2 token HTTP request for this service."
+    },
+    {
+      "name": "feign.auth.cache.provider",
+      "type": "java.lang.String",
+      "description": "Cache provider type. Supported values are local and redis.",
+      "defaultValue": "local"
+    },
+    {
+      "name": "feign.auth.cache.redis.key-prefix",
+      "type": "java.lang.String",
+      "description": "Redis key prefix used for both token cache and distributed lock keys. Token keys will be formatted as {prefix}token:{key}, lock keys as {prefix}lock:{key}.",
+      "defaultValue": "feign-auth:"
     }
   ],
   "hints": [
@@ -164,6 +181,19 @@
         },
         {
           "value": "get"
+        }
+      ]
+    },
+    {
+      "name": "feign.auth.cache.provider",
+      "values": [
+        {
+          "value": "local",
+          "description": "Use in-memory ConcurrentHashMap for token storage and synchronized locks."
+        },
+        {
+          "value": "redis",
+          "description": "Use Redis for token storage with TTL and distributed locks via SETNX."
         }
       ]
     }

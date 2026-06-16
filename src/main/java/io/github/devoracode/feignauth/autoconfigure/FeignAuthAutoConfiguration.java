@@ -9,6 +9,12 @@ import io.github.devoracode.feignauth.oauth2.OAuth2ClientMatcher;
 import io.github.devoracode.feignauth.oauth2.OAuth2TokenRequestClient;
 import io.github.devoracode.feignauth.oauth2.OAuth2TokenResponseParser;
 import io.github.devoracode.feignauth.oauth2.TokenFetcher;
+import io.github.devoracode.feignauth.oauth2.lock.LocalLockProvider;
+import io.github.devoracode.feignauth.oauth2.lock.LockProvider;
+import io.github.devoracode.feignauth.oauth2.lock.RedisLockProvider;
+import io.github.devoracode.feignauth.oauth2.store.LocalTokenStore;
+import io.github.devoracode.feignauth.oauth2.store.RedisTokenStore;
+import io.github.devoracode.feignauth.oauth2.store.TokenStore;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClientBuilder;
@@ -18,10 +24,13 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.jackson.JacksonAutoConfiguration;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
 import org.springframework.web.client.RestTemplate;
 
@@ -87,6 +96,43 @@ public class FeignAuthAutoConfiguration {
 		return new HeaderManager(customizers);
 	}
 
+	@Bean
+	@ConditionalOnMissingBean(TokenStore.class)
+	@ConditionalOnProperty(prefix = "feign.auth.cache", name = "provider", havingValue = "local",
+			matchIfMissing = true)
+	public TokenStore tokenStore() {
+
+		return new LocalTokenStore();
+	}
+
+	@Bean
+	@ConditionalOnMissingBean(TokenStore.class)
+	@ConditionalOnProperty(prefix = "feign.auth.cache", name = "provider", havingValue = "redis")
+	public TokenStore redisTokenStore(RedisTemplate<String,Object> redisTemplate,
+			FeignAuthProperties properties) {
+
+		return new RedisTokenStore(redisTemplate, properties.getAuth()
+						.getCache()
+						.getRedis());
+	}
+
+	@Bean
+	@ConditionalOnMissingBean(LockProvider.class)
+	@ConditionalOnProperty(prefix = "feign.auth.cache", name = "provider",
+			havingValue = "local", matchIfMissing = true)
+	public LockProvider lockProvider() {
+
+		return new LocalLockProvider();
+	}
+
+	@Bean
+	@ConditionalOnMissingBean(LockProvider.class)
+	@ConditionalOnProperty(prefix = "feign.auth.cache",
+			name = "provider", havingValue = "redis")
+	public LockProvider redisLockProvider(StringRedisTemplate redisTemplate, FeignAuthProperties.Redis redis) {
+		return new RedisLockProvider(redisTemplate, redis);
+	}
+
 	@Configuration(proxyBeanMethods = false)
 	@ConditionalOnMissingBean(TokenFetcher.class)
 	static class TokenFetcherConfiguration {
@@ -94,11 +140,11 @@ public class FeignAuthAutoConfiguration {
 		@Bean
 		TokenFetcher tokenFetcher(FeignAuthProperties properties, OAuth2ClientMatcher clientMatcher,
 				@Qualifier("feignAuthRestTemplate") RestTemplate restTemplate, ObjectMapper objectMapper,
-				HeaderManager headerManager) {
+				HeaderManager headerManager, TokenStore tokenStore, LockProvider lockProvider) {
 			OAuth2TokenResponseParser responseParser = new OAuth2TokenResponseParser(objectMapper);
 			OAuth2TokenRequestClient tokenRequestClient = new OAuth2TokenRequestClient(restTemplate,
 					responseParser, headerManager);
-			return new TokenFetcher(properties, clientMatcher, tokenRequestClient);
+			return new TokenFetcher(properties, clientMatcher, tokenRequestClient, tokenStore, lockProvider);
 		}
 
 	}

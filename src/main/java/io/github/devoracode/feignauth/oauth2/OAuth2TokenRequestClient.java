@@ -30,14 +30,11 @@ public class OAuth2TokenRequestClient {
 
 	private final HeaderManager headerManager;
 
-	public OAuth2TokenRequestClient(RestTemplate restTemplate, OAuth2TokenResponseParser responseParser) {
-		this(restTemplate, responseParser, new HeaderManager());
-	}
-
 	public OAuth2TokenRequestClient(RestTemplate restTemplate, OAuth2TokenResponseParser responseParser,
 	                                HeaderManager headerManager) {
 		Assert.notNull(restTemplate, "restTemplate must not be null");
 		Assert.notNull(responseParser, "responseParser must not be null");
+		Assert.notNull(headerManager, "headerManager must not be null");
 		this.restTemplate = restTemplate;
 		this.responseParser = responseParser;
 		this.headerManager = headerManager;

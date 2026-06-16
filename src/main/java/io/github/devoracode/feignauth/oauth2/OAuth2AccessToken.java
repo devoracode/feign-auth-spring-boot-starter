@@ -1,5 +1,6 @@
 package io.github.devoracode.feignauth.oauth2;
 
+import java.io.Serializable;
 import java.util.Objects;
 
 /**
@@ -8,9 +9,13 @@ import java.util.Objects;
  * @author Wenjie Liu
  * @since 1.0.0
  */
-public class OAuth2AccessToken {
+public class OAuth2AccessToken implements Serializable {
+
+	private static final long serialVersionUID = 1L;
 
 	private String accessToken;
+
+	private long ttl;
 
 	private long expireAt;
 
@@ -20,6 +25,14 @@ public class OAuth2AccessToken {
 
 	public void setAccessToken(String accessToken) {
 		this.accessToken = accessToken;
+	}
+
+	public long getTtl() {
+		return ttl;
+	}
+
+	public void setTtl(long ttl) {
+		this.ttl = ttl;
 	}
 
 	public long getExpireAt() {
@@ -36,19 +49,15 @@ public class OAuth2AccessToken {
 
 	@Override
 	public boolean equals(Object o) {
-		if (this == o) {
-			return true;
-		}
-		if (o == null || getClass() != o.getClass()) {
-			return false;
-		}
+		if (this == o) return true;
+		if (o == null || getClass() != o.getClass()) return false;
 		OAuth2AccessToken that = (OAuth2AccessToken) o;
-		return expireAt == that.expireAt && Objects.equals(accessToken, that.accessToken);
+		return ttl == that.ttl && expireAt == that.expireAt
+				&& Objects.equals(accessToken, that.accessToken);
 	}
 
 	@Override
 	public int hashCode() {
-		return Objects.hash(accessToken, expireAt);
+		return Objects.hash(accessToken, ttl, expireAt);
 	}
-
 }

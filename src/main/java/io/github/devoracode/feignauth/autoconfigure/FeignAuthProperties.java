@@ -18,7 +18,17 @@ import java.util.Map;
 @ConfigurationProperties(prefix = "feign")
 public class FeignAuthProperties {
 
+	private GlobalAuth auth = new GlobalAuth();
+
 	private Map<String, Service> services = new HashMap<>();
+
+	public GlobalAuth getAuth() {
+		return auth;
+	}
+
+	public void setAuth(GlobalAuth auth) {
+		this.auth = auth;
+	}
 
 	public Map<String, Service> getServices() {
 		return this.services;
@@ -26,6 +36,58 @@ public class FeignAuthProperties {
 
 	public void setServices(Map<String, Service> services) {
 		this.services = services;
+	}
+
+	public static class GlobalAuth {
+
+		private Cache cache = new Cache();
+
+		public Cache getCache() {
+			return cache;
+		}
+
+		public void setCache(Cache cache) {
+			this.cache = cache;
+		}
+	}
+
+	public static class Cache {
+
+		/**
+		 * local | redis
+		 */
+		private String provider = "local";
+
+		private Redis redis = new Redis();
+
+		public String getProvider() {
+			return provider;
+		}
+
+		public void setProvider(String provider) {
+			this.provider = provider;
+		}
+
+		public Redis getRedis() {
+			return redis;
+		}
+
+		public void setRedis(Redis redis) {
+			this.redis = redis;
+		}
+	}
+
+	public static class Redis {
+
+		private String keyPrefix = "feign-auth:";
+
+		public String getKeyPrefix() {
+			return keyPrefix;
+		}
+
+		public void setKeyPrefix(String keyPrefix) {
+			this.keyPrefix = keyPrefix;
+		}
 	}
 
 	/**

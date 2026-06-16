@@ -6,11 +6,16 @@ import feign.Response;
 import feign.RetryableException;
 import io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties;
 import io.github.devoracode.feignauth.exception.FeignAuthTokenException;
+import io.github.devoracode.feignauth.header.HeaderManager;
 import io.github.devoracode.feignauth.oauth2.OAuth2AccessToken;
 import io.github.devoracode.feignauth.oauth2.OAuth2ClientMatcher;
 import io.github.devoracode.feignauth.oauth2.OAuth2TokenRequestClient;
 import io.github.devoracode.feignauth.oauth2.OAuth2TokenResponseParser;
 import io.github.devoracode.feignauth.oauth2.TokenFetcher;
+import io.github.devoracode.feignauth.oauth2.lock.LocalLockProvider;
+import io.github.devoracode.feignauth.oauth2.lock.LockProvider;
+import io.github.devoracode.feignauth.oauth2.store.LocalTokenStore;
+import io.github.devoracode.feignauth.oauth2.store.TokenStore;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.client.RestTemplate;
@@ -35,7 +40,8 @@ class FeignAuthErrorDecoderTest {
 				client("telemetry", "/api/measure"), client("default")));
 
 		CountingTokenRequestClient tokenRequestClient = new CountingTokenRequestClient();
-		TokenFetcher tokenFetcher = new TokenFetcher(properties, new OAuth2ClientMatcher(), tokenRequestClient);
+		TokenFetcher tokenFetcher = new TokenFetcher(properties, new OAuth2ClientMatcher(), tokenRequestClient,
+				new LocalTokenStore(), new LocalLockProvider());
 		FeignAuthErrorDecoder decoder = new FeignAuthErrorDecoder(new ServiceMatcher(properties), tokenFetcher, objectMapper);
 
 		assertThat(tokenFetcher.getToken("measure", "/api/measure/read/1")).isEqualTo("token-1");
@@ -56,7 +62,8 @@ class FeignAuthErrorDecoderTest {
 				client("telemetry", "/api/measure"), client("default")));
 
 		CountingTokenRequestClient tokenRequestClient = new CountingTokenRequestClient();
-		TokenFetcher tokenFetcher = new TokenFetcher(properties, new OAuth2ClientMatcher(), tokenRequestClient);
+		TokenFetcher tokenFetcher = new TokenFetcher(properties, new OAuth2ClientMatcher(), tokenRequestClient,
+				new LocalTokenStore(), new LocalLockProvider());
 		FeignAuthErrorDecoder decoder = new FeignAuthErrorDecoder(new ServiceMatcher(properties), tokenFetcher, objectMapper);
 
 		Exception exception = decoder.decode("MeasureClient#getReading",
@@ -106,7 +113,7 @@ class FeignAuthErrorDecoderTest {
 		private int requestCount;
 
 		private CountingTokenRequestClient() {
-			super(new RestTemplate(), new OAuth2TokenResponseParser(new ObjectMapper()));
+			super(new RestTemplate(), new OAuth2TokenResponseParser(new ObjectMapper()), new HeaderManager());
 		}
 
 		@Override

@@ -3,6 +3,8 @@ package io.github.devoracode.feignauth.oauth2;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties;
 import io.github.devoracode.feignauth.exception.FeignAuthConfigurationException;
+import io.github.devoracode.feignauth.oauth2.lock.LockProvider;
+import io.github.devoracode.feignauth.oauth2.store.TokenStore;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.springframework.util.Assert;
@@ -29,18 +31,21 @@ public class TokenFetcher {
 
 	private final OAuth2TokenRequestClient tokenRequestClient;
 
-	private final Map<String, OAuth2AccessToken> tokenCache = new ConcurrentHashMap<>();
-	
-	private final ConcurrentHashMap<String, Object> lockMap = new ConcurrentHashMap<>();
+	private final TokenStore tokenStore;
+
+	private final LockProvider lockProvider;
 
 	public TokenFetcher(FeignAuthProperties properties, OAuth2ClientMatcher clientMatcher,
-			OAuth2TokenRequestClient tokenRequestClient) {
+			OAuth2TokenRequestClient tokenRequestClient, TokenStore tokenStore,
+			            LockProvider lockProvider) {
 		Assert.notNull(properties, "properties must not be null");
 		Assert.notNull(clientMatcher, "clientMatcher must not be null");
 		Assert.notNull(tokenRequestClient, "tokenRequestClient must not be null");
 		this.properties = properties;
 		this.clientMatcher = clientMatcher;
 		this.tokenRequestClient = tokenRequestClient;
+		this.tokenStore = tokenStore;
+		this.lockProvider = lockProvider;
 	}
 
 	/**
@@ -49,10 +54,10 @@ public class TokenFetcher {
 	 * @param restTemplate the HTTP client used to call token endpoints
 	 * @param objectMapper the JSON parser used to deserialize token responses
 	 */
-	public TokenFetcher(FeignAuthProperties properties, RestTemplate restTemplate, ObjectMapper objectMapper) {
-		this(properties, new OAuth2ClientMatcher(),
-				new OAuth2TokenRequestClient(restTemplate, new OAuth2TokenResponseParser(objectMapper)));
-	}
+//	public TokenFetcher(FeignAuthProperties properties, RestTemplate restTemplate, ObjectMapper objectMapper) {
+//		this(properties, new OAuth2ClientMatcher(),
+//				new OAuth2TokenRequestClient(restTemplate, new OAuth2TokenResponseParser(objectMapper)));
+//	}
 
 	/**
 	 * Returns a valid OAuth2 access token for the given service and request path.
@@ -86,12 +91,12 @@ public class TokenFetcher {
 
 		FeignAuthProperties.Client client = resolveClient(serviceName, service, requestPath);
 		String cacheKey = buildCacheKey(serviceName, client);
-		OAuth2AccessToken removed = this.tokenCache.remove(cacheKey);
-		if (removed != null && logger.isInfoEnabled()) {
+		boolean removed = this.tokenStore.remove(cacheKey);
+		if (removed && logger.isInfoEnabled()) {
 			logger.info("FeignAuth [oauth2] token evicted for service='" + serviceName + "', clientId='"
 					+ client.getId() + "'");
 		}
-		return removed != null;
+		return removed;
 	}
 
 	/**
@@ -118,35 +123,26 @@ public class TokenFetcher {
 	private String getCachedOrFetch(String serviceName, FeignAuthProperties.Service service,
 			FeignAuthProperties.Client client) {
 		String cacheKey = buildCacheKey(serviceName, client);
-		
-		// First check: lock-free fast path
-		OAuth2AccessToken cached = this.tokenCache.get(cacheKey);
-		if (cached != null && !cached.isExpired() && StringUtils.hasText(cached.getAccessToken())) {
+		OAuth2AccessToken cached = tokenStore.get(cacheKey);
+
+		if (cached != null && StringUtils.hasText(cached.getAccessToken())) {
+
 			return cached.getAccessToken();
 		}
-
-		// Use explicit lock object from map to avoid String.intern() issues
-		Object lock = lockMap.computeIfAbsent(cacheKey, k -> new Object());
-		synchronized (lock) {
-			// Second check: prevent duplicate fetch
-			OAuth2AccessToken cachedAgain = this.tokenCache.get(cacheKey);
-			if (cachedAgain != null && !cachedAgain.isExpired()
-					&& StringUtils.hasText(cachedAgain.getAccessToken())) {
-				return cachedAgain.getAccessToken();
-			}
-
-			if (logger.isInfoEnabled()) {
-				logger.info("FeignAuth [oauth2] fetching new token for service='" + serviceName + "', clientId='"
-						+ client.getId() + "'");
-			}
-			OAuth2AccessToken refreshed = this.tokenRequestClient.requestToken(serviceName, service, client);
-			this.tokenCache.put(cacheKey, refreshed);
-			if (logger.isInfoEnabled()) {
-				logger.info("FeignAuth [oauth2] token cached for service='" + serviceName + "', clientId='"
-						+ client.getId() + "', expireAt=" + refreshed.getExpireAt());
-			}
-			return refreshed.getAccessToken();
-		}
+		return lockProvider.execute(
+				cacheKey,
+				() -> {
+					OAuth2AccessToken cachedAgain = tokenStore.get(cacheKey);
+					if (cachedAgain != null && StringUtils.hasText(cachedAgain.getAccessToken())) {
+						return cachedAgain.getAccessToken();
+					}
+					OAuth2AccessToken refreshed = tokenRequestClient.requestToken(serviceName, service, client);
+					tokenStore.put(cacheKey, refreshed);
+					if (logger.isInfoEnabled()) {
+						logger.info("FeignAuth [oauth2] fetching new token for service='" + serviceName + "', clientId='" + client.getId() + "'");
+					}
+					return refreshed.getAccessToken();
+				});
 	}
 
 	private static String buildCacheKey(String serviceName, FeignAuthProperties.Client client) {

@@ -3,7 +3,15 @@ package io.github.devoracode.feignauth.token;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties;
 import io.github.devoracode.feignauth.exception.FeignAuthConfigurationException;
+import io.github.devoracode.feignauth.header.HeaderManager;
+import io.github.devoracode.feignauth.oauth2.OAuth2ClientMatcher;
+import io.github.devoracode.feignauth.oauth2.OAuth2TokenRequestClient;
+import io.github.devoracode.feignauth.oauth2.OAuth2TokenResponseParser;
 import io.github.devoracode.feignauth.oauth2.TokenFetcher;
+import io.github.devoracode.feignauth.oauth2.lock.LocalLockProvider;
+import io.github.devoracode.feignauth.oauth2.lock.LockProvider;
+import io.github.devoracode.feignauth.oauth2.store.LocalTokenStore;
+import io.github.devoracode.feignauth.oauth2.store.TokenStore;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.client.RestTemplate;
 
@@ -17,7 +25,7 @@ class TokenFetcherTest {
 	@Test
 	void resolvesOAuth2ClientByLongestPathPrefixThenDefaultClient() {
 		FeignAuthProperties properties = new FeignAuthProperties();
-		TokenFetcher tokenFetcher = new TokenFetcher(properties, new RestTemplate(), new ObjectMapper());
+		TokenFetcher tokenFetcher = createTokenFetcher(properties);
 
 		FeignAuthProperties.Service service = oauth2Service(
 				client("event", "/api/measure"),
@@ -33,12 +41,21 @@ class TokenFetcherTest {
 	@Test
 	void rejectsMultipleDefaultOAuth2Clients() {
 		FeignAuthProperties properties = new FeignAuthProperties();
-		TokenFetcher tokenFetcher = new TokenFetcher(properties, new RestTemplate(), new ObjectMapper());
+		TokenFetcher tokenFetcher = createTokenFetcher(properties);
 		FeignAuthProperties.Service service = oauth2Service(client("first"), client("second"));
 
 		assertThatThrownBy(() -> tokenFetcher.resolveClient("measure", service, "/api/other"))
 				.isInstanceOf(FeignAuthConfigurationException.class)
 				.hasMessageContaining("Multiple default OAuth2 clients");
+	}
+
+	private static TokenFetcher createTokenFetcher(FeignAuthProperties properties) {
+		ObjectMapper objectMapper = new ObjectMapper();
+		OAuth2TokenRequestClient tokenRequestClient = new OAuth2TokenRequestClient(
+				new RestTemplate(), new OAuth2TokenResponseParser(objectMapper), new HeaderManager());
+		TokenStore tokenStore = new LocalTokenStore();
+		LockProvider lockProvider = new LocalLockProvider();
+		return new TokenFetcher(properties, new OAuth2ClientMatcher(), tokenRequestClient, tokenStore, lockProvider);
 	}
 
 	private static FeignAuthProperties.Service oauth2Service(FeignAuthProperties.Client... clients) {
