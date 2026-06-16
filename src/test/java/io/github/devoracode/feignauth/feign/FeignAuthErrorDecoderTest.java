@@ -1,5 +1,6 @@
 package io.github.devoracode.feignauth.feign;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import feign.Request;
 import feign.RequestTemplate;
 import feign.Response;
@@ -7,16 +8,9 @@ import feign.RetryableException;
 import io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties;
 import io.github.devoracode.feignauth.exception.FeignAuthTokenException;
 import io.github.devoracode.feignauth.header.HeaderManager;
-import io.github.devoracode.feignauth.oauth2.OAuth2AccessToken;
-import io.github.devoracode.feignauth.oauth2.OAuth2ClientMatcher;
-import io.github.devoracode.feignauth.oauth2.OAuth2TokenRequestClient;
-import io.github.devoracode.feignauth.oauth2.OAuth2TokenResponseParser;
-import io.github.devoracode.feignauth.oauth2.TokenFetcher;
+import io.github.devoracode.feignauth.oauth2.*;
 import io.github.devoracode.feignauth.oauth2.lock.LocalLockProvider;
-import io.github.devoracode.feignauth.oauth2.lock.LockProvider;
 import io.github.devoracode.feignauth.oauth2.store.LocalTokenStore;
-import io.github.devoracode.feignauth.oauth2.store.TokenStore;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.client.RestTemplate;
 

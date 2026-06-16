@@ -326,7 +326,7 @@ public class FeignAuthProperties {
 			if (this.expiredTokenStatuses != null && !this.expiredTokenStatuses.isEmpty()) {
 				return this.expiredTokenStatuses.contains(status);
 			}
-			return status == 410 || status == 421 || status == 423;
+			return status == 401 || status == 421 || status == 423;
 		}
 
 	}

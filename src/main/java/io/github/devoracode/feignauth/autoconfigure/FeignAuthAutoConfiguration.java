@@ -22,9 +22,11 @@ import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration;
 import org.springframework.boot.autoconfigure.jackson.JacksonAutoConfiguration;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -45,7 +47,7 @@ import java.util.List;
  */
 @Configuration(proxyBeanMethods = false)
 @ConditionalOnClass(RequestInterceptor.class)
-@AutoConfigureAfter(JacksonAutoConfiguration.class)
+@AutoConfigureAfter(value = { JacksonAutoConfiguration.class, RedisAutoConfiguration.class })
 @EnableConfigurationProperties(FeignAuthProperties.class)
 public class FeignAuthAutoConfiguration {
 
@@ -107,6 +109,7 @@ public class FeignAuthAutoConfiguration {
 
 	@Bean
 	@ConditionalOnMissingBean(TokenStore.class)
+	@ConditionalOnBean(RedisTemplate.class)
 	@ConditionalOnProperty(prefix = "feign.auth.cache", name = "provider", havingValue = "redis")
 	public TokenStore redisTokenStore(RedisTemplate<String,Object> redisTemplate,
 			FeignAuthProperties properties) {
@@ -127,6 +130,7 @@ public class FeignAuthAutoConfiguration {
 
 	@Bean
 	@ConditionalOnMissingBean(LockProvider.class)
+	@ConditionalOnBean(StringRedisTemplate.class)
 	@ConditionalOnProperty(prefix = "feign.auth.cache",
 			name = "provider", havingValue = "redis")
 	public LockProvider redisLockProvider(StringRedisTemplate redisTemplate, FeignAuthProperties.Redis redis) {
