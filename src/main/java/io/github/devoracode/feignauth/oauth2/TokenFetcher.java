@@ -1,6 +1,5 @@
 package io.github.devoracode.feignauth.oauth2;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties;
 import io.github.devoracode.feignauth.exception.FeignAuthConfigurationException;
 import io.github.devoracode.feignauth.oauth2.lock.LockProvider;
@@ -9,11 +8,9 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
-import org.springframework.web.client.RestTemplate;
 
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Provides cached OAuth2 access tokens for configured Feign services.

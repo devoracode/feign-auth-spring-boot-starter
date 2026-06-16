@@ -9,7 +9,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class LocalLockProvider implements LockProvider {
 
     private final ConcurrentHashMap<String, LockEntry> lockMap = new ConcurrentHashMap<>();
-    
+
     private static final int CLEANUP_THRESHOLD = 100;
     private static final long MAX_LOCK_AGE_MS = 60000;
     private final AtomicInteger operationCount = new AtomicInteger(0);

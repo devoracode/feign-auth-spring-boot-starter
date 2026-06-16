@@ -53,8 +53,7 @@ public class RedisLockProvider implements LockProvider {
     }
 
     private boolean tryLock(String lockKey, String requestId) {
-        Boolean success = redisTemplate.opsForValue().setIfAbsent(
-                lockKey, requestId, DEFAULT_LOCK_TTL_SECONDS, TimeUnit.SECONDS);
+        Boolean success = redisTemplate.opsForValue().setIfAbsent(lockKey, requestId, DEFAULT_LOCK_TTL_SECONDS, TimeUnit.SECONDS);
         return Boolean.TRUE.equals(success);
     }
 

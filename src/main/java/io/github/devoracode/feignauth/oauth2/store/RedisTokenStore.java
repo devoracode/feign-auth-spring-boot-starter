@@ -9,17 +9,12 @@ import java.util.concurrent.TimeUnit;
 public class RedisTokenStore implements TokenStore {
 
     private static final String TOKEN_SUFFIX = "token:";
-    
-    @SuppressWarnings("rawtypes")
-    private final RedisTemplate redisTemplate;
+
+    private final RedisTemplate<Object, Object> redisTemplate;
 
     private final String keyPrefix;
 
-    @SuppressWarnings("rawtypes")
-    public RedisTokenStore(
-            RedisTemplate redisTemplate,
-            FeignAuthProperties.Redis redis) {
-
+    public RedisTokenStore(RedisTemplate<Object, Object> redisTemplate, FeignAuthProperties.Redis redis) {
         this.redisTemplate = redisTemplate;
         this.keyPrefix = redis.getKeyPrefix();
     }
@@ -27,11 +22,9 @@ public class RedisTokenStore implements TokenStore {
     @Override
     public OAuth2AccessToken get(String key) {
         Object value = redisTemplate.opsForValue().get(keyPrefix + TOKEN_SUFFIX + key);
-
         if (value instanceof OAuth2AccessToken) {
             return (OAuth2AccessToken) value;
         }
-
         return null;
     }
 
