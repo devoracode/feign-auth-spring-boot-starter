@@ -6,7 +6,7 @@
 
     <groupId>io.github.devoracode</groupId>
     <artifactId>feign-auth-spring-boot-starter</artifactId>
-    <version>1.17.2</version>
+    <version>1.17.3</version>
     <packaging>jar</packaging>
 
     <name>feign-auth-spring-boot-starter</name>
