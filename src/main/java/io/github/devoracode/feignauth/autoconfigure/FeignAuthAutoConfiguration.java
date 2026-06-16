@@ -109,11 +109,11 @@ public class FeignAuthAutoConfiguration {
 
 	@Bean
 	@ConditionalOnMissingBean(TokenStore.class)
+	@ConditionalOnClass(RedisTemplate.class)
 	@ConditionalOnBean(RedisTemplate.class)
 	@ConditionalOnProperty(prefix = "feign.auth.cache", name = "provider", havingValue = "redis")
-	public TokenStore redisTokenStore(RedisTemplate<String,Object> redisTemplate,
+	public TokenStore redisTokenStore(RedisTemplate<Object, Object> redisTemplate,
 			FeignAuthProperties properties) {
-
 		return new RedisTokenStore(redisTemplate, properties.getAuth()
 						.getCache()
 						.getRedis());
@@ -130,6 +130,7 @@ public class FeignAuthAutoConfiguration {
 
 	@Bean
 	@ConditionalOnMissingBean(LockProvider.class)
+	@ConditionalOnClass(StringRedisTemplate.class)
 	@ConditionalOnBean(StringRedisTemplate.class)
 	@ConditionalOnProperty(prefix = "feign.auth.cache",
 			name = "provider", havingValue = "redis")

@@ -49,7 +49,7 @@ class FeignAuthErrorDecoderTest {
 	}
 
 	@Test
-	void returnsClearUnauthorizedExceptionFor401WithoutRetry() {
+	void evictsOAuth2TokenAndRetriesWhenRemoteServiceReturns401() {
 		FeignAuthProperties properties = new FeignAuthProperties();
 		properties.setServices(new LinkedHashMap<>());
 		properties.getServices().put("measure", oauth2Service("https://api.service-a.com",
@@ -60,14 +60,14 @@ class FeignAuthErrorDecoderTest {
 				new LocalTokenStore(), new LocalLockProvider());
 		FeignAuthErrorDecoder decoder = new FeignAuthErrorDecoder(new ServiceMatcher(properties), tokenFetcher, objectMapper);
 
+		assertThat(tokenFetcher.getToken("measure", "/api/measure/read/1")).isEqualTo("token-1");
+
 		Exception exception = decoder.decode("MeasureClient#getReading",
 				response(401, "https://api.service-a.com/api/measure/read/1"));
 
-		assertThat(exception).isInstanceOf(FeignAuthTokenException.class)
-				.isNotInstanceOf(RetryableException.class)
-				.hasMessageContaining("returned 401")
-				.hasMessageContaining("measure");
-		assertThat(tokenRequestClient.getRequestCount()).isZero();
+		assertThat(exception).isInstanceOf(RetryableException.class);
+		assertThat(tokenFetcher.getToken("measure", "/api/measure/read/1")).isEqualTo("token-2");
+		assertThat(tokenRequestClient.getRequestCount()).isEqualTo(2);
 	}
 
 	private static Response response(int status, String url) {

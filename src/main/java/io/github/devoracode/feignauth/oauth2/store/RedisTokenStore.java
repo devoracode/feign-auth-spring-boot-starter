@@ -10,12 +10,14 @@ public class RedisTokenStore implements TokenStore {
 
     private static final String TOKEN_SUFFIX = "token:";
     
-    private final RedisTemplate<String, Object> redisTemplate;
+    @SuppressWarnings("rawtypes")
+    private final RedisTemplate redisTemplate;
 
     private final String keyPrefix;
 
+    @SuppressWarnings("rawtypes")
     public RedisTokenStore(
-            RedisTemplate<String, Object> redisTemplate,
+            RedisTemplate redisTemplate,
             FeignAuthProperties.Redis redis) {
 
         this.redisTemplate = redisTemplate;
