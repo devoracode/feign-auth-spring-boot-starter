@@ -8,6 +8,13 @@
 # -----------------------------------------------------------------------------
 
 feign:
+  auth:
+    cache:
+      provider: redis
+
+      redis:
+        key-prefix: "feign-auth:token:"
+
   services:
     measure:
       base-url: https://api.service-a.com
