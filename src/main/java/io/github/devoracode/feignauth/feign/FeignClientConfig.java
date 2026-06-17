@@ -6,6 +6,7 @@ import feign.Retryer;
 import feign.codec.ErrorDecoder;
 import io.github.devoracode.feignauth.header.HeaderManager;
 import io.github.devoracode.feignauth.oauth2.TokenFetcher;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.util.Assert;
@@ -30,14 +31,13 @@ public class FeignClientConfig {
 
 	private final ObjectMapper objectMapper;
 
-	public FeignClientConfig(ServiceMatcher serviceMatcher, TokenFetcher tokenFetcher,
+	public FeignClientConfig(ServiceMatcher serviceMatcher, ObjectProvider<TokenFetcher> tokenFetcherProvider,
 	                         HeaderManager headerManager, ObjectMapper objectMapper) {
 		Assert.notNull(serviceMatcher, "serviceMatcher must not be null");
-		Assert.notNull(tokenFetcher, "tokenFetcher must not be null");
 		Assert.notNull(headerManager, "headerManager must not be null");
 		Assert.notNull(objectMapper, "objectMapper must not be null");
 		this.serviceMatcher = serviceMatcher;
-		this.tokenFetcher = tokenFetcher;
+		this.tokenFetcher = tokenFetcherProvider.getIfAvailable();
 		this.headerManager = headerManager;
 		this.objectMapper = objectMapper;
 	}
