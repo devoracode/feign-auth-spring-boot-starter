@@ -8,10 +8,10 @@ import io.github.devoracode.feignauth.exception.FeignAuthTokenException;
 import io.github.devoracode.feignauth.header.HeaderManager;
 import io.github.devoracode.feignauth.oauth2.TokenFetcher;
 import io.github.devoracode.feignauth.support.PathUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.springframework.util.Assert;
-import org.springframework.util.StringUtils;
 
 import java.net.URI;
 
@@ -52,16 +52,16 @@ public class FeignAuthRequestInterceptor implements RequestInterceptor {
         String targetPathPrefix;
         try {
             URI uri = URI.create(targetUrl);
-            String path = StringUtils.hasText(uri.getRawPath()) ? uri.getRawPath() : "";
+            String path = StringUtils.isNotBlank(uri.getRawPath()) ? uri.getRawPath() : "";
             baseUrl = uri.getScheme() + "://" + uri.getAuthority();
-            targetPathPrefix = trimTrailingSlash(path);
+            targetPathPrefix = StringUtils.stripEnd(path, "/");
         } catch (Exception ex) {
             baseUrl = targetUrl;
             targetPathPrefix = "";
         }
 
         String methodPath = PathUtils.normalizePath(template.path());
-        String requestPath = StringUtils.hasText(targetPathPrefix) ? targetPathPrefix + methodPath : methodPath;
+        String requestPath = StringUtils.isNotBlank(targetPathPrefix) ? targetPathPrefix + methodPath : methodPath;
 
         ResolvedService resolved = this.serviceMatcher.match(baseUrl, requestPath);
         if (resolved == null) {
@@ -110,7 +110,7 @@ public class FeignAuthRequestInterceptor implements RequestInterceptor {
 
     private void applyApiKey(RequestTemplate template, ResolvedService resolved, FeignAuthProperties.Auth auth,
                              String requestPath) {
-        if (!StringUtils.hasText(auth.getValue())) {
+        if (StringUtils.isBlank(auth.getValue())) {
             throw new FeignAuthConfigurationException(
                 "API key value is required for service: " + resolved.getServiceName());
         }
@@ -148,18 +148,7 @@ public class FeignAuthRequestInterceptor implements RequestInterceptor {
 
     private static String prefix(FeignAuthProperties.Auth auth) {
         String prefix = auth.getTokenPrefix();
-        return StringUtils.hasText(prefix) ? prefix : "";
-    }
-
-    private static String trimTrailingSlash(String value) {
-        if (!StringUtils.hasText(value)) {
-            return value;
-        }
-        int end = value.length();
-        while (end > 0 && value.charAt(end - 1) == '/') {
-            end--;
-        }
-        return end == value.length() ? value : value.substring(0, end);
+        return StringUtils.defaultString(prefix);
     }
 
 }

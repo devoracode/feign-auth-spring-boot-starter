@@ -3,13 +3,13 @@ package io.github.devoracode.feignauth.oauth2;
 import io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties;
 import io.github.devoracode.feignauth.exception.FeignAuthConfigurationException;
 import io.github.devoracode.feignauth.header.HeaderManager;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.util.Assert;
-import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
 
@@ -50,11 +50,11 @@ public class OAuth2TokenRequestClient {
 	public OAuth2AccessToken requestToken(String serviceName, FeignAuthProperties.Service service,
 			FeignAuthProperties.Client client) {
 		FeignAuthProperties.Auth auth = service.getAuth();
-		if (!StringUtils.hasText(auth.getTokenUrl())) {
+		if (StringUtils.isBlank(auth.getTokenUrl())) {
 			throw new FeignAuthConfigurationException(
 					"token-url is required for OAuth2 service baseUrl=" + service.getBaseUrl());
 		}
-		if (!StringUtils.hasText(client.getId()) || !StringUtils.hasText(client.getSecret())) {
+		if (StringUtils.isBlank(client.getId()) || StringUtils.isBlank(client.getSecret())) {
 			throw new FeignAuthConfigurationException(
 					"OAuth2 client id and secret are required for service baseUrl=" + service.getBaseUrl());
 		}
@@ -98,18 +98,16 @@ public class OAuth2TokenRequestClient {
 	private static Map<String, String> buildTokenRequestParameters(FeignAuthProperties.Auth auth,
 			FeignAuthProperties.Client client) {
 		FeignAuthProperties.RequestFields fields = auth.getRequestFields();
-		String clientIdField = StringUtils.hasText(fields.getClientId()) ? fields.getClientId() : "client_id";
-		String clientSecretField = StringUtils.hasText(fields.getClientSecret()) ? fields.getClientSecret()
-				: "client_secret";
+		String clientIdField = StringUtils.defaultString(fields.getClientId(), "client_id");
+		String clientSecretField = StringUtils.defaultString(fields.getClientSecret(), "client_secret");
 
 		Map<String, String> parameters = new HashMap<>();
 		parameters.put(clientIdField, client.getId());
 		parameters.put(clientSecretField, client.getSecret());
 
-		if (!StringUtils.hasText(fields.getClientId()) && !StringUtils.hasText(fields.getClientSecret())) {
-			parameters.put("grant_type",
-					StringUtils.hasText(client.getGrantType()) ? client.getGrantType() : "client_credentials");
-		} else if (StringUtils.hasText(fields.getGrantType()) && StringUtils.hasText(client.getGrantType())) {
+		if (StringUtils.isBlank(fields.getClientId()) && StringUtils.isBlank(fields.getClientSecret())) {
+			parameters.put("grant_type", StringUtils.defaultString(client.getGrantType(), "client_credentials"));
+		} else if (StringUtils.isNotBlank(fields.getGrantType()) && StringUtils.isNotBlank(client.getGrantType())) {
 			parameters.put(fields.getGrantType(), client.getGrantType());
 		}
 		return parameters;

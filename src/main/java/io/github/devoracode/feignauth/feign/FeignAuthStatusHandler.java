@@ -14,7 +14,7 @@ import io.github.devoracode.feignauth.support.PathUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.springframework.util.Assert;
-import org.springframework.util.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 
 import java.io.IOException;
 import java.net.URI;
@@ -128,7 +128,7 @@ final class FeignAuthStatusHandler {
 		// 2. This is an OAuth2 service
 		// 3. responseStatusField is explicitly configured
 		return !isExpiredTokenStatus(resolved, status) && isOAuth2Service(resolved)
-				&& StringUtils.hasText(auth.getResponseStatusField());
+				&& StringUtils.isNotBlank(auth.getResponseStatusField());
 	}
 
 	private Integer detectExpiredTokenStatus(ResolvedService resolved, int status, byte[] bodyBytes) {
@@ -148,7 +148,7 @@ final class FeignAuthStatusHandler {
 
 		FeignAuthProperties.Auth auth = resolved.getService().getAuth();
 		String responseStatusField = auth.getResponseStatusField();
-		if (!StringUtils.hasText(responseStatusField)) {
+		if (StringUtils.isBlank(responseStatusField)) {
 			return null;
 		}
 
@@ -171,7 +171,7 @@ final class FeignAuthStatusHandler {
 	}
 
 	private Integer parseJsonField(String jsonBody, String fieldPath) {
-		if (!StringUtils.hasText(jsonBody) || !StringUtils.hasText(fieldPath)) {
+		if (StringUtils.isBlank(jsonBody) || StringUtils.isBlank(fieldPath)) {
 			return null;
 		}
 
@@ -248,11 +248,11 @@ final class FeignAuthStatusHandler {
 		}
 
 		static ResolvedRequest from(Request request) {
-			if (request == null || !StringUtils.hasText(request.url())) {
+			if (request == null || StringUtils.isBlank(request.url())) {
 				return null;
 			}
 			URI uri = URI.create(request.url());
-			String path = StringUtils.hasText(uri.getRawPath()) ? uri.getRawPath() : "";
+			String path = StringUtils.isNotBlank(uri.getRawPath()) ? uri.getRawPath() : "";
 			return new ResolvedRequest(uri.getScheme() + "://" + uri.getAuthority(),
 					PathUtils.normalizePath(path));
 		}

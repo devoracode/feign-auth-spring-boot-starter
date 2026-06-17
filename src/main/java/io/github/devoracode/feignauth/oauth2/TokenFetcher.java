@@ -4,10 +4,10 @@ import io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties;
 import io.github.devoracode.feignauth.exception.FeignAuthConfigurationException;
 import io.github.devoracode.feignauth.oauth2.lock.LockProvider;
 import io.github.devoracode.feignauth.oauth2.store.TokenStore;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.springframework.util.Assert;
-import org.springframework.util.StringUtils;
 
 import java.util.Map;
 import java.util.Objects;
@@ -124,7 +124,7 @@ public class TokenFetcher {
 		String cacheKey = buildCacheKey(serviceName, client);
 		OAuth2AccessToken cached = tokenStore.get(cacheKey);
 
-		if (cached != null && StringUtils.hasText(cached.getAccessToken())) {
+		if (cached != null && StringUtils.isNotBlank(cached.getAccessToken())) {
 
 			return cached.getAccessToken();
 		}
@@ -132,7 +132,7 @@ public class TokenFetcher {
 				cacheKey,
 				() -> {
 					OAuth2AccessToken cachedAgain = tokenStore.get(cacheKey);
-					if (cachedAgain != null && StringUtils.hasText(cachedAgain.getAccessToken())) {
+					if (cachedAgain != null && StringUtils.isNotBlank(cachedAgain.getAccessToken())) {
 						return cachedAgain.getAccessToken();
 					}
 					OAuth2AccessToken refreshed = tokenRequestClient.requestToken(serviceName, service, client);

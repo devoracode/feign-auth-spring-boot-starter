@@ -1,5 +1,7 @@
 package io.github.devoracode.feignauth.support;
 
+import org.apache.commons.lang3.StringUtils;
+
 /**
  * Supported authentication types for configured Feign services.
  *
@@ -34,7 +36,7 @@ public enum AuthType {
 	 * @return the matching {@link AuthType}, or {@code null} when {@code type} is blank
 	 */
 	public static AuthType from(String type) {
-		if (!org.springframework.util.StringUtils.hasText(type)) {
+		if (StringUtils.isBlank(type)) {
 			return null;
 		}
 		for (AuthType authType : values()) {

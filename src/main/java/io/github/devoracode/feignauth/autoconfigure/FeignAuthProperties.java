@@ -1,8 +1,8 @@
 package io.github.devoracode.feignauth.autoconfigure;
 
 import io.github.devoracode.feignauth.support.AuthType;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -302,9 +302,9 @@ public class FeignAuthProperties {
 
         public String resolveHeaderName() {
             if (isApiKey()) {
-                return StringUtils.hasText(this.headerName) ? this.headerName : "Authorization";
+                return StringUtils.defaultIfBlank(this.headerName, "Authorization");
             }
-            return StringUtils.hasText(this.tokenHeader) ? this.tokenHeader : "x-token";
+            return StringUtils.defaultIfBlank(this.tokenHeader, "x-token");
         }
 
         public boolean isFallback() {
