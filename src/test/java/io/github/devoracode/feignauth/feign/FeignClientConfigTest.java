@@ -66,13 +66,6 @@ class FeignClientConfigTest {
 		return new FeignAuthRequestInterceptor(new ServiceMatcher(properties), null, new HeaderManager());
 	}
 
-	private static RequestTemplate templateFor(String baseUrl, String path) {
-		RequestTemplate template = new RequestTemplate();
-		template.feignTarget(new Target.HardCodedTarget<>(Object.class, "test", baseUrl));
-		template.uri(path);
-		return template;
-	}
-
 	private static FeignAuthProperties.Service apiKeyService(String baseUrl, String apiKey, String... pathPrefixes) {
 		FeignAuthProperties.Service service = new FeignAuthProperties.Service();
 		service.setBaseUrl(baseUrl);
