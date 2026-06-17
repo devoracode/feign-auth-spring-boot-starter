@@ -83,10 +83,14 @@ public class FeignAuthRequestInterceptor implements RequestInterceptor {
 
         if (auth.isApiKey()) {
             applyApiKey(template, resolved, auth, requestPath);
-        }
-
-        if (auth.isOAuth2()) {
+        } else if (auth.isOAuth2()) {
             applyOAuth2(template, resolved, auth, requestPath);
+        } else {
+            if (logger.isWarnEnabled()) {
+                logger.warn("FeignAuth: service '" + resolved.getServiceName()
+                    + "' has unsupported auth type '" + auth.getType()
+                    + "' — request will be sent without auth header");
+            }
         }
 
         this.headerManager.applyRequestHeaders(

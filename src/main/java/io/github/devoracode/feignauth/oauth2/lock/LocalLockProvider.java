@@ -19,12 +19,14 @@ public class LocalLockProvider implements LockProvider {
         LockEntry entry = lockMap.computeIfAbsent(key, k -> new LockEntry());
         try {
             synchronized (entry.lock) {
+                entry.inUse = true;
                 entry.timestamp = System.currentTimeMillis();
                 return callable.call();
             }
         } catch (Exception e) {
             throw new FeignAuthTokenException("Error executing with lock for key: " + key, e);
         } finally {
+            entry.inUse = false;
             maybeCleanup();
         }
     }
@@ -38,11 +40,13 @@ public class LocalLockProvider implements LockProvider {
 
     private void cleanupExpiredLocks() {
         long now = System.currentTimeMillis();
-        lockMap.entrySet().removeIf(entry -> now - entry.getValue().timestamp > MAX_LOCK_AGE_MS);
+        lockMap.entrySet().removeIf(entry ->
+                !entry.getValue().inUse && now - entry.getValue().timestamp > MAX_LOCK_AGE_MS);
     }
 
     private static class LockEntry {
         final Object lock = new Object();
         volatile long timestamp = System.currentTimeMillis();
+        volatile boolean inUse = false;
     }
 }

@@ -19,6 +19,7 @@ import org.springframework.util.StringUtils;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.util.Date;
 
 /**
  * Handles HTTP error responses for Feign requests, including OAuth2 token eviction
@@ -203,14 +204,15 @@ final class FeignAuthStatusHandler {
 	}
 
 	private Exception handleExpiredToken(Response response, ResolvedService resolved, ResolvedRequest request,
-			int status) {
+			Integer detectedStatus) {
 		boolean evicted = this.tokenFetcher.invalidateToken(resolved.getServiceName(), request.getRequestPath());
-		String message = "FeignAuth: service '" + resolved.getServiceName() + "' returned " + status
+		String message = "FeignAuth: service '" + resolved.getServiceName() + "' returned " + detectedStatus
 				+ ", OAuth2 token cache evicted=" + evicted + ", retrying request";
 		if (logger.isWarnEnabled()) {
 			logger.warn(message);
 		}
-		return new RetryableException(status, message, response.request().httpMethod(), null,
+		Date retryAfter = new Date(System.currentTimeMillis() + 1000L);
+		return new RetryableException(detectedStatus, message, response.request().httpMethod(), retryAfter,
 				response.request());
 	}
 

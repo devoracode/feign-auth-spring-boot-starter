@@ -38,6 +38,8 @@ public class TokenFetcher {
 		Assert.notNull(properties, "properties must not be null");
 		Assert.notNull(clientMatcher, "clientMatcher must not be null");
 		Assert.notNull(tokenRequestClient, "tokenRequestClient must not be null");
+		Assert.notNull(tokenStore, "tokenStore must not be null");
+		Assert.notNull(lockProvider, "lockProvider must not be null");
 		this.properties = properties;
 		this.clientMatcher = clientMatcher;
 		this.tokenRequestClient = tokenRequestClient;
