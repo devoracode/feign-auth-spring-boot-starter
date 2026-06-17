@@ -3,9 +3,9 @@ package io.github.devoracode.feignauth.oauth2;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.devoracode.feignauth.exception.FeignAuthTokenException;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.http.ResponseEntity;
 import org.springframework.util.Assert;
-import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -135,7 +135,7 @@ public class OAuth2TokenResponseParser {
 		}
 		else if (node.isTextual()) {
 			try {
-				value = Long.parseLong(StringUtils.trimWhitespace(node.asText()));
+				value = Long.parseLong(StringUtils.strip(node.asText()));
 			}
 			catch (NumberFormatException ignored) {
 				// continue
@@ -148,16 +148,16 @@ public class OAuth2TokenResponseParser {
 	}
 
 	private static String extractAccessToken(JsonNode root, String tokenField) {
-		if (StringUtils.hasText(tokenField)) {
+		if (StringUtils.isNotBlank(tokenField)) {
 			String token = resolveTokenByPath(root, tokenField.trim());
-			if (!StringUtils.hasText(token)) {
+			if (StringUtils.isBlank(token)) {
 				throw new FeignAuthTokenException(
 						"Token field '" + tokenField + "' not found or blank in response");
 			}
 			return token;
 		}
 		String token = firstText(root, "access_token", "accessToken", "token");
-		if (!StringUtils.hasText(token)) {
+		if (StringUtils.isBlank(token)) {
 			throw new FeignAuthTokenException("Token field not found in response");
 		}
 		return token;
@@ -176,7 +176,7 @@ public class OAuth2TokenResponseParser {
 			return null;
 		}
 		String value = node.asText();
-		return StringUtils.hasText(value) ? value : null;
+		return StringUtils.isNotBlank(value) ? value : null;
 	}
 
 	private static String firstText(JsonNode root, String... fieldNames) {
@@ -185,7 +185,7 @@ public class OAuth2TokenResponseParser {
 				.filter(Objects::nonNull)
 				.filter(JsonNode::isValueNode)
 				.map(JsonNode::asText)
-				.filter(StringUtils::hasText)
+				.filter(StringUtils::isNotBlank)
 				.findFirst()
 				.orElse(null);
 	}

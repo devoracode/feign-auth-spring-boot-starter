@@ -1,7 +1,5 @@
 package io.github.devoracode.feignauth.feign;
 
-import feign.RequestTemplate;
-import feign.Target;
 import io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties;
 import io.github.devoracode.feignauth.exception.FeignAuthConfigurationException;
 import io.github.devoracode.feignauth.header.HeaderManager;

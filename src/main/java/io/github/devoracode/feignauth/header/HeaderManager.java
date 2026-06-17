@@ -2,11 +2,11 @@ package io.github.devoracode.feignauth.header;
 
 import feign.RequestTemplate;
 import io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.util.Assert;
-import org.springframework.util.StringUtils;
 
 import java.util.Collections;
 import java.util.List;
@@ -133,7 +133,7 @@ public class HeaderManager {
 			return;
 		}
 		staticHeaders.forEach((name, value) -> {
-			if (StringUtils.hasText(name) && value != null) {
+			if (StringUtils.isNotBlank(name) && value != null) {
 				target.set(name, value);
 			}
 		});
