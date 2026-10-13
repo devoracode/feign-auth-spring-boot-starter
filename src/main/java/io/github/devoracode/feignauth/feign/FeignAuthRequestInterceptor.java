@@ -116,9 +116,9 @@ public class FeignAuthRequestInterceptor implements RequestInterceptor {
         }
         String headerName = auth.resolveHeaderName();
         String headerValue = prefix(auth) + auth.getValue();
-        template.header(headerName, headerValue);
-        if (logger.isInfoEnabled()) {
-            logger.info("FeignAuth [api-key] service='" + resolved.getServiceName() + "' header='" + headerName
+        setHeader(template, headerName, headerValue);
+        if (logger.isDebugEnabled()) {
+            logger.debug("FeignAuth [api-key] service='" + resolved.getServiceName() + "' header='" + headerName
                 + "' path=" + requestPath);
         }
     }
@@ -139,9 +139,9 @@ public class FeignAuthRequestInterceptor implements RequestInterceptor {
         }
         String headerName = auth.resolveHeaderName();
         String headerValue = prefix(auth) + token;
-        template.header(headerName, headerValue);
-        if (logger.isInfoEnabled()) {
-            logger.info("FeignAuth [oauth2] service='" + resolved.getServiceName() + "' header='" + headerName
+        setHeader(template, headerName, headerValue);
+        if (logger.isDebugEnabled()) {
+            logger.debug("FeignAuth [oauth2] service='" + resolved.getServiceName() + "' header='" + headerName
                 + "' path=" + requestPath);
         }
     }
@@ -149,6 +149,12 @@ public class FeignAuthRequestInterceptor implements RequestInterceptor {
     private static String prefix(FeignAuthProperties.Auth auth) {
         String prefix = auth.getTokenPrefix();
         return StringUtils.defaultString(prefix);
+    }
+
+    // header() appends and Feign re-runs interceptors on the same template when retrying, so clear the name first.
+    private static void setHeader(RequestTemplate template, String name, String value) {
+        template.header(name);
+        template.header(name, value);
     }
 
 }

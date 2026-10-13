@@ -43,11 +43,11 @@ public class HeaderManager {
 	private final List<HeaderCustomizer> customizers;
 
 	public HeaderManager() {
-		this(Collections.<HeaderCustomizer>emptyList());
+		this(Collections.emptyList());
 	}
 
 	public HeaderManager(List<HeaderCustomizer> customizers) {
-		this.customizers = (customizers != null) ? customizers : Collections.<HeaderCustomizer>emptyList();
+		this.customizers = (customizers != null) ? customizers : Collections.emptyList();
 	}
 
 	// ── Business request ─────────────────────────────────────────────────────
@@ -83,9 +83,10 @@ public class HeaderManager {
 			}
 		}
 
-		// Merge into RequestTemplate
+		// Merge into RequestTemplate; header() appends, so clear each name first (re-applied on Feign retry).
 		headers.forEach((name, values) -> {
 			if (!values.isEmpty()) {
+				template.header(name);
 				template.header(name, values);
 			}
 		});

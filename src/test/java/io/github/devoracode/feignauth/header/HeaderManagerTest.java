@@ -124,6 +124,37 @@ class HeaderManagerTest {
 	}
 
 	@Test
+	void repeatedApplyDoesNotDuplicateTemplateHeaders() {
+		FeignAuthProperties.Service service = serviceWithRequestHeaders(headers("X-App-Id", "my-app"));
+		RequestTemplate template = template("https://api.example.com", "/api/data");
+
+		// Feign re-applies interceptors on the same RequestTemplate when retrying
+		HeaderManager manager = new HeaderManager();
+		manager.applyRequestHeaders("svc", service, "/api/data", template);
+		manager.applyRequestHeaders("svc", service, "/api/data", template);
+
+		assertThat(template.headers().get("X-App-Id")).containsExactly("my-app");
+	}
+
+	@Test
+	void customizerOverrideAppliesTwiceWithoutAccumulating() {
+		FeignAuthProperties.Service service = serviceWithRequestHeaders(headers("X-App-Id", "static"));
+		RequestTemplate template = template("https://api.example.com", "/api/data");
+
+		HeaderCustomizer overrider = new HeaderCustomizer() {
+			@Override public boolean supports(String n, FeignAuthProperties.Service s) { return true; }
+			@Override public void customize(RequestContext ctx, HttpHeaders h) {
+				h.set("X-App-Id", "dynamic");
+			}
+		};
+		HeaderManager manager = new HeaderManager(Collections.singletonList(overrider));
+		manager.applyRequestHeaders("svc", service, "/api/data", template);
+		manager.applyRequestHeaders("svc", service, "/api/data", template);
+
+		assertThat(template.headers().get("X-App-Id")).containsExactly("dynamic");
+	}
+
+	@Test
 	void multipleCustomizersCalledInOrderForRequest() {
 		FeignAuthProperties.Service service = serviceWithRequestHeaders(Collections.emptyMap());
 		RequestTemplate template = template("https://api.example.com", "/api/data");
