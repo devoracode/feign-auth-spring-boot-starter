@@ -30,7 +30,9 @@ public class RedisTokenStore implements TokenStore {
 
     @Override
     public void put(String key, OAuth2AccessToken token) {
-        redisTemplate.opsForValue().set(keyPrefix + TOKEN_SUFFIX + key, token, token.getTtl(), TimeUnit.SECONDS);
+        // SETEX rejects ttl <= 0, so fall back to the shortest valid expiry
+        long ttl = Math.max(1L, token.getTtl());
+        redisTemplate.opsForValue().set(keyPrefix + TOKEN_SUFFIX + key, token, ttl, TimeUnit.SECONDS);
     }
 
     @Override

@@ -56,6 +56,34 @@ class OAuth2TokenResponseParserTest {
 		assertThat(ttlMillis).isBetween(7190000L, 7200000L);
 	}
 
+	@Test
+	void clampsTtlToOneSecondWhenExpireAheadSecondsReachesExpiresIn() {
+		String body = "{\"access_token\":\"token-value\",\"expires_in\":10}";
+		OAuth2AccessToken accessToken = this.parser.parse(ok(body), 60L, null, null);
+
+		assertThat(accessToken.getTtl()).isEqualTo(1L);
+		long ttlMillis = accessToken.getExpireAt() - System.currentTimeMillis();
+		assertThat(ttlMillis).isBetween(0L, 1000L);
+	}
+
+	@Test
+	void clampsTtlToOneSecondWhenExpireAheadSecondsEqualsExpiresIn() {
+		String body = "{\"access_token\":\"token-value\",\"expires_in\":60}";
+		OAuth2AccessToken accessToken = this.parser.parse(ok(body), 60L, null, null);
+
+		assertThat(accessToken.getTtl()).isEqualTo(1L);
+	}
+
+	@Test
+	void handlesMinimumExpiresIn() {
+		String body = "{\"access_token\":\"token-value\",\"expires_in\":1}";
+		OAuth2AccessToken accessToken = this.parser.parse(ok(body), 60L, null, null);
+
+		assertThat(accessToken.getTtl()).isEqualTo(1L);
+		long ttlMillis = accessToken.getExpireAt() - System.currentTimeMillis();
+		assertThat(ttlMillis).isBetween(0L, 1000L);
+	}
+
 	private static ResponseEntity<String> ok(String body) {
 		return new ResponseEntity<>(body, HttpStatus.OK);
 	}

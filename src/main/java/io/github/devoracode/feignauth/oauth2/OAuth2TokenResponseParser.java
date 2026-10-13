@@ -56,7 +56,10 @@ public class OAuth2TokenResponseParser {
 			JsonNode root = this.objectMapper.readTree(response.getBody() == null ? "" : response.getBody());
 			String token = extractAccessToken(root, tokenField);
 			long expiresIn = resolveExpiresInSeconds(root, configuredExpiresInSeconds);
-			long refreshIn = Math.max(0L, expiresIn - Math.max(0L, expireAheadSeconds));
+			// Clamp so refreshIn is always >= 1: a 0-second TTL breaks Redis SETEX
+			// and makes the local cache expire instantly (token endpoint storm).
+			long expireAhead = Math.max(0L, Math.min(expireAheadSeconds, expiresIn - 1L));
+			long refreshIn = Math.max(1L, expiresIn - expireAhead);
 
 			OAuth2AccessToken accessToken = new OAuth2AccessToken();
 			accessToken.setAccessToken(token);
