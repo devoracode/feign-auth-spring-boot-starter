@@ -25,7 +25,8 @@ replay_pid*
 
 .idea
 target
-.trae
-
-.vscode
-.workbuddy
+.*/
+.*
+!.gitignore
+!.github
+docs/
