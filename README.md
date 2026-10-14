@@ -29,7 +29,7 @@ Spring Boot Starter，为 OpenFeign 提供多服务鉴权自动注入与自定�
 - `base-url` 按 `scheme://host:port` 归一化匹配（大小写与默认端口无关），配置的路径段自动作为外层前缀参与匹配
 - 自定义 Token 请求字段名（如 `appId` / `appSecret` 替代 `client_id` / `client_secret`）
 - 从 Token 响应中自定义提取字段路径（如 `data.accessToken`），自动解析过期时间
-- Token 过期自动重试（默认 HTTP 401 / 421 / 423，可通过配置自定义状态码）
+- Token 过期自动重试（默认 HTTP 401 / 421 / 423，可通过配置自定义状态码；默认 Retryer 可被自定义 Bean 覆盖，见「重试与请求重放」）
 - 支持从响应体中解析过期状态码（需配置 `response-status-field`，适用于不规范的第三方 API 返回 HTTP 200/400 但在响应体中包含过期状态）
 - 静态固定 Header：在 YAML 中配置 `request-headers`（业务请求）与 `token-request-headers`（Token 请求）
 - 动态 Header 注入：实现 `HeaderCustomizer` 接口，按服务维度注入任意动态计算的 Header
@@ -377,6 +377,42 @@ public class SignatureCustomizer implements HeaderCustomizer { ... }
 ```
 
 > 静态 `request-headers` / `token-request-headers` 先写入，动态 HeaderCustomizer 后写入，同名 header 会被覆盖。
+
+---
+
+## 重试与请求重放
+
+starter 默认注册一个 Feign `Retryer`（最多 2 次尝试，退避 100ms ~ 1s），以下两种情况会**重放整个请求**：
+
+1. **Token 过期**：收到 401 / 421 / 423（或 `expired-token-statuses` 配置的状态码）时，starter 驱逐缓存 token 并抛出 `RetryableException`，Feign 携带新 token 重发一次。
+2. **网络类错误**：连接/读取超时等 I/O 异常同样会被默认 Retryer 重试。
+
+重放带来的两个约束需要使用方知晓：
+
+- **非幂等接口**：POST 创建订单等请求若在服务端已实际处理、但响应未按预期返回（超时、401 歧义），重放会造成重复提交。建议为非幂等接口设计幂等键。
+- **HeaderCustomizer 副作用**：每次重试都会重新执行 `RequestInterceptor`，因此 `HeaderCustomizer` 每次尝试都会再跑一遍——HMAC 时间戳、nonce、签名计数器会被消耗两次。定制器应保持无副作用（纯读取、纯计算）；若必须消费一次性凭据，请关闭自动重放或让凭据服务对同一请求幂等。
+
+> Header 本身不会重复叠加：同名 header 在合并进 `RequestTemplate` 前会先清除旧值。
+
+### 关闭或自定义重放
+
+默认 Retryer 带 `@ConditionalOnMissingBean(Retryer.class)`，只要在该客户端的子上下文中先行注册自己的 `Retryer` Bean，starter 就自动让位：
+
+```java
+@Configuration
+public class NoReplayConfig {
+    @Bean
+    public Retryer noReplayRetryer() {
+        return new Retryer.Default(); // 或 Retryer.NEVER_RETRY
+    }
+}
+
+@FeignClient(name = "orders", url = "${feign.services.orders.base-url}",
+    configuration = {NoReplayConfig.class, FeignClientConfig.class})
+public interface OrdersClient { ... }
+```
+
+注意 `configuration` 数组中自定义配置要排在 `FeignClientConfig` 之前；若顺序无法保证，可给自定义 Retryer 加 `@Primary`。
 
 ---
 

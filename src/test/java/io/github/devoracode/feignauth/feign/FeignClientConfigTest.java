@@ -1,15 +1,21 @@
 package io.github.devoracode.feignauth.feign;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import feign.RetryableException;
+import feign.Retryer;
 import io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties;
 import io.github.devoracode.feignauth.exception.FeignAuthConfigurationException;
 import io.github.devoracode.feignauth.header.HeaderManager;
+import io.github.devoracode.feignauth.oauth2.TokenFetcher;
 import org.junit.jupiter.api.Test;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
 
 class FeignClientConfigTest {
 
@@ -132,6 +138,62 @@ class FeignClientConfigTest {
 	}
 
 	// ── 辅助方法 ──────────────────────────────────────────────────────────
+
+	@Test
+	void userDefinedRetryerReplacesDefaultWhenRegisteredFirst() {
+		Retryer custom = new Retryer() {
+			@Override
+			public void continueOrPropagate(RetryableException e) {
+				throw e;
+			}
+
+			@Override
+			public Retryer clone() {
+				return this;
+			}
+		};
+
+		AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext();
+		FeignAuthProperties properties = new FeignAuthProperties();
+		context.registerBean(FeignAuthProperties.class, () -> properties);
+		context.registerBean(ServiceMatcher.class, () -> new ServiceMatcher(properties));
+		context.registerBean(HeaderManager.class, () -> new HeaderManager());
+		context.registerBean(ObjectMapper.class, () -> new ObjectMapper());
+		context.registerBean(Retryer.class, () -> custom);
+		context.registerBean(TokenFetcher.class, () -> mock(TokenFetcher.class));
+		context.register(FeignClientConfig.class);
+		context.refresh();
+
+		try {
+			assertThat(context.getBeansOfType(Retryer.class).values()).containsExactly(custom);
+		}
+		finally {
+			context.close();
+		}
+	}
+
+	@Test
+	void defaultRetryerRegisteredWhenUserHasNone() {
+		AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext();
+		FeignAuthProperties properties = new FeignAuthProperties();
+		context.registerBean(FeignAuthProperties.class, () -> properties);
+		context.registerBean(ServiceMatcher.class, () -> new ServiceMatcher(properties));
+		context.registerBean(HeaderManager.class, () -> new HeaderManager());
+		context.registerBean(ObjectMapper.class, () -> new ObjectMapper());
+		context.registerBean(TokenFetcher.class, () -> mock(TokenFetcher.class));
+		context.register(FeignClientConfig.class);
+		context.refresh();
+
+		try {
+			assertThat(context.getBeansOfType(Retryer.class).values()).hasSize(1);
+			assertThat(context.getBean(Retryer.class)).isInstanceOf(Retryer.Default.class);
+		}
+		finally {
+			context.close();
+		}
+	}
+
+	// ── 装配 ──────────────────────────────────────────────────────────────
 
 	private static FeignAuthRequestInterceptor interceptor(FeignAuthProperties properties) {
 		return new FeignAuthRequestInterceptor(new ServiceMatcher(properties), null, new HeaderManager(),

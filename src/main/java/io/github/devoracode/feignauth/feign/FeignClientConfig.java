@@ -8,6 +8,7 @@ import io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties;
 import io.github.devoracode.feignauth.header.HeaderManager;
 import io.github.devoracode.feignauth.oauth2.TokenFetcher;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.util.Assert;
@@ -59,6 +60,7 @@ public class FeignClientConfig {
 	}
 
 	@Bean
+	@ConditionalOnMissingBean(Retryer.class)
 	public Retryer feignAuthRetryer() {
 		return new Retryer.Default(100, TimeUnit.SECONDS.toMillis(1), 2);
 	}
