@@ -44,4 +44,23 @@ class PathUtilsTest {
 		assertThat(PathUtils.bestPrefixMatchLength(null, "/api/v1")).isZero();
 	}
 
+	@Test
+	void normalizesAuthorityWithDefaultPortsAndLowercase() {
+		assertThat(PathUtils.normalizeBaseUrlAuthority("https://API.example.com")).isEqualTo("https://api.example.com:443");
+		assertThat(PathUtils.normalizeBaseUrlAuthority("https://api.example.com:443/")).isEqualTo("https://api.example.com:443");
+		assertThat(PathUtils.normalizeBaseUrlAuthority("http://localhost")).isEqualTo("http://localhost:80");
+		assertThat(PathUtils.normalizeBaseUrlAuthority("https://api.example.com/v1")).isEqualTo("https://api.example.com:443");
+		assertThat(PathUtils.normalizeBaseUrlAuthority("https://api.example.com:8443")).isEqualTo("https://api.example.com:8443");
+		assertThat(PathUtils.normalizeBaseUrlAuthority("my-service")).isNull();
+		assertThat(PathUtils.normalizeBaseUrlAuthority(null)).isNull();
+	}
+
+	@Test
+	void extractsBaseUrlPathWithoutTrailingSlash() {
+		assertThat(PathUtils.baseUrlPath("https://api.example.com/v1/")).isEqualTo("/v1");
+		assertThat(PathUtils.baseUrlPath("https://api.example.com")).isEmpty();
+		assertThat(PathUtils.baseUrlPath("https://api.example.com/v1/deep")).isEqualTo("/v1/deep");
+		assertThat(PathUtils.baseUrlPath(null)).isEmpty();
+	}
+
 }

@@ -98,6 +98,57 @@ class FeignAuthRequestInterceptorTest {
 		assertThat(template.headers()).isEmpty();
 	}
 
+	@Test
+	void apiKeyHeaderAppliedWhenTargetUrlCarriesConfiguredBasePath() {
+		FeignAuthProperties.Service service = service("api-key", auth -> {
+			auth.setHeaderName("Authorization");
+			auth.setValue("sk-test");
+			auth.setPathPrefixes(Collections.singletonList("/api/orders"));
+		});
+		service.setBaseUrl("https://api.example.com/v1");
+
+		RequestTemplate template = template("https://api.example.com/v1", "/api/orders/1");
+		FeignAuthRequestInterceptor interceptor = interceptorWith(service, null);
+
+		interceptor.apply(template);
+
+		assertThat(template.headers().get("Authorization")).containsExactly("sk-test");
+	}
+
+	@Test
+	void noMatchFailureMessageListsConfiguredServices() {
+		FeignAuthProperties.Service service = service("api-key", auth -> auth.setValue("sk-test"));
+		FeignAuthProperties properties = new FeignAuthProperties();
+		properties.getServices().put("order-api", service);
+		FeignAuthRequestInterceptor interceptor = new FeignAuthRequestInterceptor(new ServiceMatcher(properties),
+			null, new HeaderManager(), properties);
+
+		RequestTemplate template = template("https://unknown.example.com", "/api/data");
+
+		assertThat(org.junit.jupiter.api.Assertions.assertThrows(
+			io.github.devoracode.feignauth.exception.FeignAuthConfigurationException.class,
+			() -> interceptor.apply(template)).getMessage())
+				.contains("order-api")
+				.contains("https://api.example.com")
+				.contains("fail-on-no-match");
+	}
+
+	@Test
+	void throwsOnUnsupportedAuthTypeEvenWhenFailOnNoMatchDisabled() {
+		FeignAuthProperties.Service service = service("oauth", auth -> auth.setValue("ignored"));
+		FeignAuthProperties properties = new FeignAuthProperties();
+		properties.getAuth().setFailOnNoMatch(false);
+		properties.getServices().put("order", service);
+		FeignAuthRequestInterceptor interceptor = new FeignAuthRequestInterceptor(new ServiceMatcher(properties),
+			null, new HeaderManager(), properties);
+
+		RequestTemplate template = template("https://api.example.com", "/api/data");
+
+		assertThat(org.junit.jupiter.api.Assertions.assertThrows(
+			io.github.devoracode.feignauth.exception.FeignAuthConfigurationException.class,
+			() -> interceptor.apply(template)).getMessage()).contains("auth.type");
+	}
+
 	private static FeignAuthRequestInterceptor interceptorWith(FeignAuthProperties.Service service,
 			TokenFetcher tokenFetcher) {
 		FeignAuthProperties properties = new FeignAuthProperties();

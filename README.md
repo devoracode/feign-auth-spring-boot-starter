@@ -14,7 +14,7 @@ Spring Boot Starter，为 OpenFeign 提供多服务鉴权自动注入与自定�
 <dependency>
     <groupId>io.github.devoracode</groupId>
     <artifactId>feign-auth-spring-boot-starter</artifactId>
-    <version>1.18.2</version>
+    <version>1.19.0</version>
 </dependency>
 ```
 
@@ -26,6 +26,7 @@ Spring Boot Starter，为 OpenFeign 提供多服务鉴权自动注入与自定�
 - API Key 鉴权，支持自定义 Header 名与前缀
 - 同一服务可按请求路径前缀匹配不同 OAuth2 Client 凭证
 - 同域名下支持多个服务配置，按最长路径前缀优先匹配 + 兜底
+- `base-url` 按 `scheme://host:port` 归一化匹配（大小写与默认端口无关），配置的路径段自动作为外层前缀参与匹配
 - 自定义 Token 请求字段名（如 `appId` / `appSecret` 替代 `client_id` / `client_secret`）
 - 从 Token 响应中自定义提取字段路径（如 `data.accessToken`），自动解析过期时间
 - Token 过期自动重试（默认 HTTP 401 / 421 / 423，可通过配置自定义状态码）
@@ -150,7 +151,7 @@ feign:
 
 所有匹配均采用**最长前缀优先 + 兜底**策略：
 
-1. 按请求 `base-url`（忽略大小写和末尾斜杠）过滤候选服务
+1. 按请求 `base-url` 的 **authority**（`scheme://host:port`）过滤候选服务：忽略大小写，补全协议默认端口（`http`→80、`https`→443，因此 `https://api.x.com` 与 `https://api.x.com:443` 等价）；配置 `base-url` 携带的路径段（如 `https://api.x.com/v1` 中的 `/v1`）自动视为**外层前缀**——请求路径落在其下时先剥离该段，再进行 `path-prefixes` 匹配
 2. 在候选服务中，按最长 `path-prefixes` 命中的服务优先；前缀按**路径段边界**匹配（`/api/measure` 命中 `/api/measure/1`，不会命中 `/api/measurement/1`），前缀末尾的 `/` 会被忽略
 3. 无路径命中时，使用兜底配置（同 `base-url` 下只能有一个兜底）
 4. OAuth2 服务内部：先按 Client 的 `path-prefixes` 匹配，无命中时使用默认 Client（无 `path-prefixes` 的 Client）
@@ -163,7 +164,7 @@ feign:
 
 ### 无匹配服务时的处置
 
-当请求未能匹配到任何服务配置（如 Feign target URL 带路径前缀、显式端口，或走服务发现时负载均衡名与配置不一致），默认**快速失败**：直接抛出 `FeignAuthConfigurationException`，请求不会发出，避免未鉴权请求打到远端接口。
+当请求未能匹配到任何服务配置（如走服务发现时负载均衡名与配置不一致，或 target URL 指向了未配置的 host/端口），默认**快速失败**：直接抛出 `FeignAuthConfigurationException`，请求不会发出，避免未鉴权请求打到远端接口。异常信息会列出当前已配置的服务清单（`名称 -> base-url`）与修正指引。
 
 如需恢复旧版「记录 WARN 日志后不带鉴权头放行」的行为，可显式关闭：
 
@@ -172,6 +173,21 @@ feign:
   auth:
     fail-on-no-match: false   # 默认 true
 ```
+
+### auth 配置非法时的处置
+
+若请求命中的服务存在但 `auth` 缺失、或 `auth.type` 拼写错误（如 `oauth`、`apikey`，合法取值只有 `oauth2` 与 `api-key`），**始终快速失败**并抛出 `FeignAuthConfigurationException`，不受 `fail-on-no-match` 开关影响——这类配置笔误不应静默放行未鉴权请求。
+
+---
+
+## 1.19.0 升级检查清单
+
+本版本修复两个 P1 缺陷，升级前请自查：
+
+- [ ] **base-url 带路径的写法恢复正常**：`@FeignClient(url = "${feign.services.x.base-url}")` + `base-url: https://api.x.com/v1` 此前会因路径部分不参与归一化而**每个请求抛异常**；现在按 `scheme://host:默认端口` 归一化匹配，配置的 `/v1` 自动作为外层前缀参与路径匹配，**无需**再把路径挪进 `path-prefixes`
+- [ ] **显式默认端口等价**：`https://api.x.com` 与 `https://api.x.com:443`、`http://host` 与 `http://host:80` 现在视为同一服务；非默认端口（如 `:8080`）仍严格区分
+- [ ] **auth.type 拼错不再静默放行**：`oauth`、`apikey` 等错误取值（或整个 `auth` 缺失）此前只打 WARN 后不带鉴权头发出请求，现在直接抛 `FeignAuthConfigurationException`；如确有「故意不鉴权」的服务，请勿为其配置 `base-url` 匹配，或全局设置 `feign.auth.fail-on-no-match: false`（不推荐）
+- [ ] 未匹配异常的**报错信息**已包含已配置服务清单，可据此排查 target URL 与配置不一致的根因
 
 ---
 

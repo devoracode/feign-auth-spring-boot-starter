@@ -14,6 +14,8 @@ import org.apache.commons.logging.LogFactory;
 import org.springframework.util.Assert;
 
 import java.net.URI;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * 向每个发出的 Feign 业务请求注入认证 header 及额外自定义 header 的
@@ -71,7 +73,12 @@ public class FeignAuthRequestInterceptor implements RequestInterceptor {
         if (resolved == null) {
             if (this.properties.getAuth().isFailOnNoMatch()) {
                 throw new FeignAuthConfigurationException(
-                    "FeignAuth: no service config matched for baseUrl=" + baseUrl + ", path=" + requestPath);
+                    "FeignAuth: no service config matched for baseUrl=" + baseUrl + ", path=" + requestPath
+                        + "; configured services: " + describeConfiguredServices()
+                        + "; the Feign target URL must point to the same scheme/host/port as"
+                        + " feign.services.<name>.base-url (default ports 80/443 are normalized, a base-url path is"
+                        + " treated as an outer prefix for path matching)"
+                        + "; set feign.auth.fail-on-no-match=false to send unmatched requests without auth headers");
             }
             if (logger.isWarnEnabled()) {
                 logger.warn("FeignAuth: no service config matched for baseUrl=" + baseUrl + ", path=" + requestPath
@@ -81,12 +88,10 @@ public class FeignAuthRequestInterceptor implements RequestInterceptor {
         }
 
         FeignAuthProperties.Auth auth = resolved.getService().getAuth();
+        // ServiceMatcher 已拒绝非法 auth，此处仅作防御
         if (auth == null) {
-            if (logger.isWarnEnabled()) {
-                logger.warn("FeignAuth: service '" + resolved.getServiceName()
-                    + "' has no auth config — request will be sent without auth header");
-            }
-            return;
+            throw new FeignAuthConfigurationException("FeignAuth: service '" + resolved.getServiceName()
+                + "' has no auth config — fix feign.services." + resolved.getServiceName() + ".auth");
         }
 
         if (auth.isApiKey()) {
@@ -94,11 +99,9 @@ public class FeignAuthRequestInterceptor implements RequestInterceptor {
         } else if (auth.isOAuth2()) {
             applyOAuth2(template, resolved, auth, requestPath);
         } else {
-            if (logger.isWarnEnabled()) {
-                logger.warn("FeignAuth: service '" + resolved.getServiceName()
-                    + "' has unsupported auth type '" + auth.getType()
-                    + "' — request will be sent without auth header");
-            }
+            throw new FeignAuthConfigurationException("FeignAuth: service '" + resolved.getServiceName()
+                + "' has unsupported auth.type '" + auth.getType()
+                + "', expected 'oauth2' or 'api-key'");
         }
 
         this.headerManager.applyRequestHeaders(
@@ -163,6 +166,17 @@ public class FeignAuthRequestInterceptor implements RequestInterceptor {
     private static void setHeader(RequestTemplate template, String name, String value) {
         template.header(name);
         template.header(name, value);
+    }
+
+    private String describeConfiguredServices() {
+        Map<String, FeignAuthProperties.Service> services = this.properties.getServices();
+        if (services == null || services.isEmpty()) {
+            return "<none configured>";
+        }
+        return services.entrySet().stream()
+            .map(entry -> entry.getKey() + " -> "
+                + (entry.getValue() == null ? "<empty>" : entry.getValue().getBaseUrl()))
+            .collect(Collectors.joining(", ", "[", "]"));
     }
 
 }

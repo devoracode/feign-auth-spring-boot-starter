@@ -58,6 +58,79 @@ class FeignClientConfigTest {
 				.hasMessageContaining("Multiple services matched");
 	}
 
+	@Test
+	void matchesWhenConfiguredBaseUrlCarriesPathAndTargetInterpolatesIt() {
+		FeignAuthProperties properties = new FeignAuthProperties();
+		properties.setServices(new LinkedHashMap<>());
+		properties.getServices().put("orders", apiKeyService("https://api.service-d.com/v1", "sk-orders", "/api/orders"));
+
+		FeignAuthRequestInterceptor interceptor = interceptor(properties);
+
+		// 典型写法：@FeignClient(url = "${feign.services.orders.base-url}")，target URL 与配置完全一致
+		assertThat(interceptor.matchService("https://api.service-d.com", "/v1/api/orders/1").getServiceName())
+				.isEqualTo("orders");
+	}
+
+	@Test
+	void matchesIgnoringDefaultPortAndHostCase() {
+		FeignAuthProperties properties = new FeignAuthProperties();
+		properties.setServices(new LinkedHashMap<>());
+		properties.getServices().put("orders", apiKeyService("https://API.Service-D.com:443", "sk-orders", "/api/orders"));
+
+		FeignAuthRequestInterceptor interceptor = interceptor(properties);
+
+		assertThat(interceptor.matchService("https://api.service-d.com", "/api/orders/1").getServiceName())
+				.isEqualTo("orders");
+		assertThat(interceptor.matchService("https://api.service-d.com:443", "/api/orders/1").getServiceName())
+				.isEqualTo("orders");
+	}
+
+	@Test
+	void doesNotMatchWhenRequestPathFallsOutsideConfiguredBasePath() {
+		FeignAuthProperties properties = new FeignAuthProperties();
+		properties.setServices(new LinkedHashMap<>());
+		properties.getServices().put("orders", apiKeyService("https://api.service-d.com/v1", "sk-orders", "/api/orders"));
+
+		FeignAuthRequestInterceptor interceptor = interceptor(properties);
+
+		assertThat(interceptor.matchService("https://api.service-d.com", "/other/1")).isNull();
+	}
+
+	@Test
+	void rejectsUnsupportedAuthTypeEvenWhenFailOnNoMatchDisabled() {
+		FeignAuthProperties properties = new FeignAuthProperties();
+		properties.getAuth().setFailOnNoMatch(false);
+		properties.setServices(new LinkedHashMap<>());
+		FeignAuthProperties.Service service = new FeignAuthProperties.Service();
+		service.setBaseUrl("https://api.service-d.com");
+		FeignAuthProperties.Auth auth = new FeignAuthProperties.Auth();
+		auth.setType("apikey");
+		service.setAuth(auth);
+		properties.getServices().put("typo", service);
+
+		FeignAuthRequestInterceptor interceptor = interceptor(properties);
+
+		assertThatThrownBy(() -> interceptor.matchService("https://api.service-d.com", "/api/anything"))
+				.isInstanceOf(FeignAuthConfigurationException.class)
+				.hasMessageContaining("auth.type")
+				.hasMessageContaining("typo");
+	}
+
+	@Test
+	void rejectsMatchedServiceWithoutAuthConfig() {
+		FeignAuthProperties properties = new FeignAuthProperties();
+		properties.setServices(new LinkedHashMap<>());
+		FeignAuthProperties.Service service = new FeignAuthProperties.Service();
+		service.setBaseUrl("https://api.service-d.com");
+		properties.getServices().put("noauth", service);
+
+		FeignAuthRequestInterceptor interceptor = interceptor(properties);
+
+		assertThatThrownBy(() -> interceptor.matchService("https://api.service-d.com", "/api/anything"))
+				.isInstanceOf(FeignAuthConfigurationException.class)
+				.hasMessageContaining("auth");
+	}
+
 	// ── 辅助方法 ──────────────────────────────────────────────────────────
 
 	private static FeignAuthRequestInterceptor interceptor(FeignAuthProperties properties) {

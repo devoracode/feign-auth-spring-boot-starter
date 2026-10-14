@@ -2,7 +2,9 @@ package io.github.devoracode.feignauth.support;
 
 import org.apache.commons.lang3.StringUtils;
 
+import java.net.URI;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * 用于归一化请求路径并匹配已配置路径前缀的工具类。
@@ -82,6 +84,79 @@ public final class PathUtils {
 		String normalizedRight = StringUtils.stripEnd(StringUtils.strip(right), "/");
 		return StringUtils.isNotBlank(normalizedLeft)
 				&& normalizedLeft.equalsIgnoreCase(normalizedRight);
+	}
+
+	/**
+	 * 将 URL 归一化为 {@code scheme://host:port} 形式的 authority 键：
+	 * scheme 与 host 转小写，省略端口时补全协议默认端口（http→80，https→443），
+	 * 并丢弃路径部分。
+	 *
+	 * <p><b>示例：</b></p>
+	 * <pre>{@code
+	 * PathUtils.normalizeBaseUrlAuthority("https://API.example.com")      // "https://api.example.com:443"
+	 * PathUtils.normalizeBaseUrlAuthority("https://api.example.com/v1")   // "https://api.example.com:443"
+	 * PathUtils.normalizeBaseUrlAuthority("http://localhost:8080/x")      // "http://localhost:8080"
+	 * PathUtils.normalizeBaseUrlAuthority("my-service")                   // null（无法解析）
+	 * }</pre>
+	 *
+	 * @param url 待归一化的 URL
+	 * @return 归一化后的 authority 键；{@code url} 空白或无法解析时返回 {@code null}
+	 */
+	public static String normalizeBaseUrlAuthority(String url) {
+		if (StringUtils.isBlank(url)) {
+			return null;
+		}
+		try {
+			URI uri = URI.create(url.trim());
+			String scheme = uri.getScheme();
+			String host = uri.getHost();
+			if (StringUtils.isBlank(scheme) || StringUtils.isBlank(host)) {
+				return null;
+			}
+			int port = uri.getPort();
+			if (port < 0) {
+				port = defaultPort(scheme);
+			}
+			String authority = scheme.toLowerCase(Locale.ROOT) + "://" + host.toLowerCase(Locale.ROOT);
+			return port > 0 ? authority + ":" + port : authority;
+		} catch (IllegalArgumentException ex) {
+			return null;
+		}
+	}
+
+	/**
+	 * 提取 URL 中的路径部分并归一化：确保以 {@code /} 开头、去掉末尾斜杠。
+	 *
+	 * <p><b>示例：</b></p>
+	 * <pre>{@code
+	 * PathUtils.baseUrlPath("https://api.example.com/v1/")  // "/v1"
+	 * PathUtils.baseUrlPath("https://api.example.com")      // ""
+	 * PathUtils.baseUrlPath(null)                           // ""
+	 * }</pre>
+	 *
+	 * @param url 待提取的 URL
+	 * @return 归一化后的路径；无路径、{@code url} 空白或无法解析时返回空字符串
+	 */
+	public static String baseUrlPath(String url) {
+		if (StringUtils.isBlank(url)) {
+			return "";
+		}
+		try {
+			URI uri = URI.create(url.trim());
+			return StringUtils.stripEnd(normalizePath(StringUtils.defaultString(uri.getRawPath())), "/");
+		} catch (IllegalArgumentException ex) {
+			return "";
+		}
+	}
+
+	private static int defaultPort(String scheme) {
+		if ("http".equalsIgnoreCase(scheme)) {
+			return 80;
+		}
+		if ("https".equalsIgnoreCase(scheme)) {
+			return 443;
+		}
+		return -1;
 	}
 
 	/**
