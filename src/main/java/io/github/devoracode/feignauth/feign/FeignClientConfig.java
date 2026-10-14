@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import feign.RequestInterceptor;
 import feign.Retryer;
 import feign.codec.ErrorDecoder;
+import io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties;
 import io.github.devoracode.feignauth.header.HeaderManager;
 import io.github.devoracode.feignauth.oauth2.TokenFetcher;
 import org.springframework.beans.factory.ObjectProvider;
@@ -31,20 +32,26 @@ public class FeignClientConfig {
 
 	private final ObjectMapper objectMapper;
 
+	private final FeignAuthProperties properties;
+
 	public FeignClientConfig(ServiceMatcher serviceMatcher, ObjectProvider<TokenFetcher> tokenFetcherProvider,
-	                         HeaderManager headerManager, ObjectMapper objectMapper) {
+	                         HeaderManager headerManager, ObjectMapper objectMapper,
+	                         FeignAuthProperties properties) {
 		Assert.notNull(serviceMatcher, "serviceMatcher must not be null");
 		Assert.notNull(headerManager, "headerManager must not be null");
 		Assert.notNull(objectMapper, "objectMapper must not be null");
+		Assert.notNull(properties, "properties must not be null");
 		this.serviceMatcher = serviceMatcher;
 		this.tokenFetcher = tokenFetcherProvider.getIfAvailable();
 		this.headerManager = headerManager;
 		this.objectMapper = objectMapper;
+		this.properties = properties;
 	}
 
 	@Bean
 	public RequestInterceptor feignAuthRequestInterceptor() {
-		return new FeignAuthRequestInterceptor(this.serviceMatcher, this.tokenFetcher, this.headerManager);
+		return new FeignAuthRequestInterceptor(this.serviceMatcher, this.tokenFetcher, this.headerManager,
+			this.properties);
 	}
 
 	@Bean

@@ -32,13 +32,17 @@ public class FeignAuthRequestInterceptor implements RequestInterceptor {
 
     private final HeaderManager headerManager;
 
+    private final FeignAuthProperties properties;
+
     public FeignAuthRequestInterceptor(ServiceMatcher serviceMatcher, TokenFetcher tokenFetcher,
-                                       HeaderManager headerManager) {
+                                       HeaderManager headerManager, FeignAuthProperties properties) {
         Assert.notNull(serviceMatcher, "serviceMatcher must not be null");
         Assert.notNull(headerManager, "headerManager must not be null");
+        Assert.notNull(properties, "properties must not be null");
         this.serviceMatcher = serviceMatcher;
         this.tokenFetcher = tokenFetcher;
         this.headerManager = headerManager;
+        this.properties = properties;
     }
 
     @Override
@@ -65,6 +69,10 @@ public class FeignAuthRequestInterceptor implements RequestInterceptor {
 
         ResolvedService resolved = this.serviceMatcher.match(baseUrl, requestPath);
         if (resolved == null) {
+            if (this.properties.getAuth().isFailOnNoMatch()) {
+                throw new FeignAuthConfigurationException(
+                    "FeignAuth: no service config matched for baseUrl=" + baseUrl + ", path=" + requestPath);
+            }
             if (logger.isWarnEnabled()) {
                 logger.warn("FeignAuth: no service config matched for baseUrl=" + baseUrl + ", path=" + requestPath
                     + " — request will be sent without auth header");

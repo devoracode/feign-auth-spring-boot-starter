@@ -42,12 +42,22 @@ public class FeignAuthProperties {
 
         private Cache cache = new Cache();
 
+        private boolean failOnNoMatch = true;
+
         public Cache getCache() {
             return cache;
         }
 
         public void setCache(Cache cache) {
             this.cache = cache;
+        }
+
+        public boolean isFailOnNoMatch() {
+            return failOnNoMatch;
+        }
+
+        public void setFailOnNoMatch(boolean failOnNoMatch) {
+            this.failOnNoMatch = failOnNoMatch;
         }
     }
 

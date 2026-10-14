@@ -61,7 +61,8 @@ class FeignClientConfigTest {
 	// ── helpers ──────────────────────────────────────────────────────────────
 
 	private static FeignAuthRequestInterceptor interceptor(FeignAuthProperties properties) {
-		return new FeignAuthRequestInterceptor(new ServiceMatcher(properties), null, new HeaderManager());
+		return new FeignAuthRequestInterceptor(new ServiceMatcher(properties), null, new HeaderManager(),
+			properties);
 	}
 
 	private static FeignAuthProperties.Service apiKeyService(String baseUrl, String apiKey, String... pathPrefixes) {

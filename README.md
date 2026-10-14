@@ -34,6 +34,7 @@ Spring Boot Starter，为 OpenFeign 提供多服务鉴权自动注入与自定�
 - 动态 Header 注入：实现 `HeaderCustomizer` 接口，按服务维度注入任意动态计算的 Header
 - 可插拔缓存机制：支持本地缓存（ConcurrentHashMap）和 Redis 缓存，自动清理过期 Token
 - 可插拔锁机制：支持本地锁（synchronized）和 Redis 分布式锁，防止并发请求重复获取 Token
+- 无匹配服务时默认快速失败（抛 `FeignAuthConfigurationException`），可配置 `feign.auth.fail-on-no-match: false` 回退为 WARN 后放行
 
 ---
 
@@ -123,7 +124,7 @@ feign:
 
 **Token 字段**：默认依次尝试 `access_token` → `accessToken` → `token`；可通过 `token-field` 指定点分路径（如 `data.accessToken`）。
 
-**过期时间**：默认从响应 JSON 中逐层查找（最多 3 层） `expires_in` → `expiresIn` → `expire_in` → `expireIn`；可通过 `token-expires-in-seconds` 显式指定；未找到时默认 7200 秒。
+**过期时间**：默认从响应 JSON 中逐层查找（最多 3 层） `expires_in` → `expiresIn` → `expire_in` → `expireIn`；可通过 `token-expires-in-seconds` 显式指定；未找到时默认 7200 秒。刷新窗口保证至少 1 秒：当 `expire-ahead-seconds` ≥ 实际有效期时自动收敛，避免缓存条目立即过期或 Redis TTL 非法。
 
 ---
 
@@ -159,6 +160,18 @@ feign:
 
 - API Key：`auth.path-prefixes` 为空
 - OAuth2：`clients` 中存在未配置 `path-prefixes` 的 Client
+
+### 无匹配服务时的处置
+
+当请求未能匹配到任何服务配置（如 Feign target URL 带路径前缀、显式端口，或走服务发现时负载均衡名与配置不一致），默认**快速失败**：直接抛出 `FeignAuthConfigurationException`，请求不会发出，避免未鉴权请求打到远端接口。
+
+如需恢复旧版「记录 WARN 日志后不带鉴权头放行」的行为，可显式关闭：
+
+```yaml
+feign:
+  auth:
+    fail-on-no-match: false   # 默认 true
+```
 
 ---
 

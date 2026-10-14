@@ -73,11 +73,38 @@ class FeignAuthRequestInterceptorTest {
 		assertThat(template.headers().get("X-App-Id")).containsExactly("my-app");
 	}
 
+	@Test
+	void throwsByDefaultWhenServiceNotFound() {
+		FeignAuthProperties properties = new FeignAuthProperties();
+		FeignAuthRequestInterceptor interceptor = new FeignAuthRequestInterceptor(
+			new ServiceMatcher(properties), null, new HeaderManager(), properties);
+
+		RequestTemplate template = template("https://unknown.example.com", "/api/data");
+
+		org.junit.jupiter.api.Assertions.assertThrows(
+			io.github.devoracode.feignauth.exception.FeignAuthConfigurationException.class,
+			() -> interceptor.apply(template));
+	}
+
+	@Test
+	void warnsButProceedsWhenFailOnNoMatchDisabledAndServiceNotFound() {
+		FeignAuthProperties properties = new FeignAuthProperties();
+		properties.getAuth().setFailOnNoMatch(false);
+		FeignAuthRequestInterceptor interceptor = new FeignAuthRequestInterceptor(
+			new ServiceMatcher(properties), null, new HeaderManager(), properties);
+
+		RequestTemplate template = template("https://unknown.example.com", "/api/data");
+
+		interceptor.apply(template);
+		assertThat(template.headers()).isEmpty();
+	}
+
 	private static FeignAuthRequestInterceptor interceptorWith(FeignAuthProperties.Service service,
 			TokenFetcher tokenFetcher) {
 		FeignAuthProperties properties = new FeignAuthProperties();
 		properties.getServices().put("order", service);
-		return new FeignAuthRequestInterceptor(new ServiceMatcher(properties), tokenFetcher, new HeaderManager());
+		return new FeignAuthRequestInterceptor(new ServiceMatcher(properties), tokenFetcher, new HeaderManager(),
+			properties);
 	}
 
 	private static FeignAuthProperties.Service service(String type,
