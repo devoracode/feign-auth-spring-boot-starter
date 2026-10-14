@@ -4,9 +4,10 @@ Spring Boot Starter，为 OpenFeign 提供多服务鉴权自动注入与自定�
 
 ## 环境要求
 
-- Java 8+
-- Spring Boot 2.2.x
-- 已启用 Spring Cloud OpenFeign
+- Java 8+（starter 以 `source/target 1.8` 编译）
+- Spring Boot 2.2.x ~ 2.7.x：基线为 2.2.5（依赖管理与测试均以此为准），自动配置同时注册 `spring.factories`（≤2.6）与 `AutoConfiguration.imports`（2.7+），故 2.7 下同样可加载
+- 使用方自行引入 OpenFeign（`spring-cloud-starter-openfeign`，对应 feign-core 10.x）：starter 对 `feign-core` 的依赖是 `optional`，不会传递进来
+- 令牌请求所需的 Apache HttpClient 与 `provider: redis` 所需的 Spring Data Redis 目前由 starter 传递引入，无需单独声明
 
 ## 安装
 
@@ -29,7 +30,7 @@ Spring Boot Starter，为 OpenFeign 提供多服务鉴权自动注入与自定�
 - `base-url` 按 `scheme://host:port` 归一化匹配（大小写与默认端口无关），配置的路径段自动作为外层前缀参与匹配
 - 自定义 Token 请求字段名（如 `appId` / `appSecret` 替代 `client_id` / `client_secret`）
 - 从 Token 响应中自定义提取字段路径（如 `data.accessToken`），自动解析过期时间
-- Token 过期自动重试（默认 HTTP 401 / 421 / 423，可通过配置自定义状态码；默认 Retryer 可被自定义 Bean 覆盖，见「重试与请求重放」）
+- Token 过期自动驱逐缓存并重试（默认 HTTP 401 / 421 / 423，可通过配置自定义状态码；同一 `{service}:{client}` 的驱逐有 30 秒冷却，冷却期内直接抛不可重试异常，详见「重试与请求重放」；默认 Retryer 可被自定义 Bean 覆盖）
 - 支持从响应体中解析过期状态码（需配置 `response-status-field`，适用于不规范的第三方 API 返回 HTTP 200/400 但在响应体中包含过期状态）
 - 静态固定 Header：在 YAML 中配置 `request-headers`（业务请求）与 `token-request-headers`（Token 请求）
 - 动态 Header 注入：实现 `HeaderCustomizer` 接口，按服务维度注入任意动态计算的 Header
@@ -417,7 +418,7 @@ starter 默认注册一个 Feign `Retryer`（最多 2 次尝试，退避 100ms ~
 public class NoReplayConfig {
     @Bean
     public Retryer noReplayRetryer() {
-        return new Retryer.Default(); // 或 Retryer.NEVER_RETRY
+        return Retryer.NEVER_RETRY;
     }
 }
 
@@ -425,6 +426,8 @@ public class NoReplayConfig {
     configuration = {NoReplayConfig.class, FeignClientConfig.class})
 public interface OrdersClient { ... }
 ```
+
+`Retryer.NEVER_RETRY` 会一并关掉 Token 过期后的那次重放：驱逐仍会发生（缓存被清、下次取号拿到新令牌），但当前请求直接把异常抛给业务方。若只想控制次数，用 `new Retryer.Default(100, TimeUnit.SECONDS.toMillis(1), n)`，其中 `n` 是含首次调用在内的总尝试数（starter 默认 `n = 2`；`n = 1` 即不重放）。注意无参的 `new Retryer.Default()` 是 `n = 5`，不能用来关闭重放。
 
 注意 `configuration` 数组中自定义配置要排在 `FeignClientConfig` 之前；若顺序无法保证，可给自定义 Retryer 加 `@Primary`。
 
@@ -442,7 +445,7 @@ feign:
     cache:
       provider: local  # local | redis，默认 local
       redis:
-        key-prefix: feign-auth:  # Redis key 前缀，默认 feign-auth:token:
+        key-prefix: feign-auth:  # Redis key 前缀，默认 feign-auth:
 ```
 
 **Redis Key 格式说明**：
@@ -465,7 +468,7 @@ feign:
 **Redis 缓存特点**：
 - 利用 Redis TTL 自动过期机制
 - 多实例共享 Token，避免重复获取
-- 需要引入 Spring Data Redis 依赖
+- Spring Data Redis 已随 starter 传递引入，无需单独声明依赖；使用方只需配置 Redis 连接（`spring.redis.*` 等）使容器中存在 `RedisConnectionFactory`
 
 ### 锁机制
 
@@ -486,5 +489,11 @@ feign:
 - 最大重试次数：60 次（约 12 秒）
 - 解锁采用 Lua 脚本原子操作（GET + DEL），避免并发竞态
 - 仅在成功获取锁后执行解锁，异常获取失败时不解锁，防止误删他人锁
+
+---
+
+## 许可证
+
+本项目基于 [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0) 开源，完整条款见仓库根目录的 `LICENSE` 文件，`pom.xml` 中的 `<licenses>` 声明与之一致。
 
 
