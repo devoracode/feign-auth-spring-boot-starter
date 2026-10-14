@@ -13,7 +13,6 @@ import io.github.devoracode.feignauth.oauth2.lock.LockProvider;
 import io.github.devoracode.feignauth.oauth2.store.LocalTokenStore;
 import io.github.devoracode.feignauth.oauth2.store.TokenStore;
 import org.junit.jupiter.api.Test;
-import org.springframework.web.client.RestTemplate;
 
 import java.util.Arrays;
 
@@ -52,7 +51,7 @@ class TokenFetcherTest {
 	private static TokenFetcher createTokenFetcher(FeignAuthProperties properties) {
 		ObjectMapper objectMapper = new ObjectMapper();
 		OAuth2TokenRequestClient tokenRequestClient = new OAuth2TokenRequestClient(
-				new RestTemplate(), new OAuth2TokenResponseParser(objectMapper), new HeaderManager());
+				new OAuth2TokenResponseParser(objectMapper), new HeaderManager());
 		TokenStore tokenStore = new LocalTokenStore();
 		LockProvider lockProvider = new LocalLockProvider();
 		return new TokenFetcher(properties, new OAuth2ClientMatcher(), tokenRequestClient, tokenStore, lockProvider);

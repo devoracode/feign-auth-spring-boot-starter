@@ -48,17 +48,6 @@ public class TokenFetcher {
 	}
 
 	/**
-	 * Creates a {@link TokenFetcher} using the default OAuth2 collaborators.
-	 * @param properties the configuration properties
-	 * @param restTemplate the HTTP client used to call token endpoints
-	 * @param objectMapper the JSON parser used to deserialize token responses
-	 */
-//	public TokenFetcher(FeignAuthProperties properties, RestTemplate restTemplate, ObjectMapper objectMapper) {
-//		this(properties, new OAuth2ClientMatcher(),
-//				new OAuth2TokenRequestClient(restTemplate, new OAuth2TokenResponseParser(objectMapper)));
-//	}
-
-	/**
 	 * Returns a valid OAuth2 access token for the given service and request path.
 	 * @param serviceName the logical service name
 	 * @param requestPath the normalized request path

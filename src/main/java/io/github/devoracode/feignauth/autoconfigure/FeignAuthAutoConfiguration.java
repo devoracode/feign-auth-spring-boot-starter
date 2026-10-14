@@ -15,12 +15,7 @@ import io.github.devoracode.feignauth.oauth2.lock.RedisLockProvider;
 import io.github.devoracode.feignauth.oauth2.store.LocalTokenStore;
 import io.github.devoracode.feignauth.oauth2.store.RedisTokenStore;
 import io.github.devoracode.feignauth.oauth2.store.TokenStore;
-import org.apache.http.client.config.RequestConfig;
-import org.apache.http.impl.client.CloseableHttpClient;
-import org.apache.http.impl.client.HttpClientBuilder;
-import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
@@ -33,8 +28,6 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
-import org.springframework.web.client.RestTemplate;
 
 import java.util.Collections;
 import java.util.List;
@@ -50,28 +43,6 @@ import java.util.List;
 @AutoConfigureAfter(value = {JacksonAutoConfiguration.class, RedisAutoConfiguration.class})
 @EnableConfigurationProperties(FeignAuthProperties.class)
 public class FeignAuthAutoConfiguration {
-
-    @Bean("feignAuthRestTemplate")
-    public RestTemplate feignAuthRestTemplate() {
-        PoolingHttpClientConnectionManager connectionManager = new PoolingHttpClientConnectionManager();
-        connectionManager.setMaxTotal(200);
-        connectionManager.setDefaultMaxPerRoute(50);
-
-        RequestConfig requestConfig = RequestConfig.custom()
-            .setConnectTimeout(5000)
-            .setConnectionRequestTimeout(5000)
-            .setSocketTimeout(10000)
-            .build();
-
-        CloseableHttpClient httpClient = HttpClientBuilder.create()
-            .setConnectionManager(connectionManager)
-            .setDefaultRequestConfig(requestConfig)
-            .evictIdleConnections(30, java.util.concurrent.TimeUnit.SECONDS)
-            .build();
-
-        HttpComponentsClientHttpRequestFactory factory = new HttpComponentsClientHttpRequestFactory(httpClient);
-        return new RestTemplate(factory);
-    }
 
     @Bean
     @ConditionalOnMissingBean
@@ -140,11 +111,11 @@ public class FeignAuthAutoConfiguration {
 
         @Bean
         TokenFetcher tokenFetcher(FeignAuthProperties properties, OAuth2ClientMatcher clientMatcher,
-                                  @Qualifier("feignAuthRestTemplate") RestTemplate restTemplate, ObjectMapper objectMapper,
-                                  HeaderManager headerManager, TokenStore tokenStore, LockProvider lockProvider) {
+                                  ObjectMapper objectMapper, HeaderManager headerManager,
+                                  TokenStore tokenStore, LockProvider lockProvider) {
             OAuth2TokenResponseParser responseParser = new OAuth2TokenResponseParser(objectMapper);
-            OAuth2TokenRequestClient tokenRequestClient = new OAuth2TokenRequestClient(restTemplate,
-                responseParser, headerManager);
+            OAuth2TokenRequestClient tokenRequestClient = new OAuth2TokenRequestClient(responseParser,
+                headerManager);
             return new TokenFetcher(properties, clientMatcher, tokenRequestClient, tokenStore, lockProvider);
         }
 

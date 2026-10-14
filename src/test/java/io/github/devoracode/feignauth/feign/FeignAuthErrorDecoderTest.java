@@ -11,7 +11,6 @@ import io.github.devoracode.feignauth.oauth2.*;
 import io.github.devoracode.feignauth.oauth2.lock.LocalLockProvider;
 import io.github.devoracode.feignauth.oauth2.store.LocalTokenStore;
 import org.junit.jupiter.api.Test;
-import org.springframework.web.client.RestTemplate;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
@@ -106,7 +105,7 @@ class FeignAuthErrorDecoderTest {
 		private int requestCount;
 
 		private CountingTokenRequestClient() {
-			super(new RestTemplate(), new OAuth2TokenResponseParser(new ObjectMapper()), new HeaderManager());
+			super(new OAuth2TokenResponseParser(new ObjectMapper()), new HeaderManager());
 		}
 
 		@Override

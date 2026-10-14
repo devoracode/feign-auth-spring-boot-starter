@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.devoracode.feignauth.exception.FeignAuthTokenException;
 import org.apache.commons.lang3.StringUtils;
-import org.springframework.http.ResponseEntity;
 import org.springframework.util.Assert;
 
 import java.util.ArrayList;
@@ -39,21 +38,21 @@ public class OAuth2TokenResponseParser {
 
 	/**
 	 * Parses the HTTP response from a token endpoint.
-	 * @param response the token endpoint response
+	 * @param statusCode the HTTP status code of the token response
+	 * @param body the raw response body
 	 * @param expireAheadSeconds seconds before expiry when the token should be refreshed
 	 * @param tokenField optional dot-separated JSON path for the access token
 	 * @param configuredExpiresInSeconds optional configured token TTL in seconds; when
 	 * positive, overrides response parsing
 	 * @return a populated access token
 	 */
-	public OAuth2AccessToken parse(ResponseEntity<String> response, long expireAheadSeconds, String tokenField,
+	public OAuth2AccessToken parse(int statusCode, String body, long expireAheadSeconds, String tokenField,
 			Long configuredExpiresInSeconds) {
-		if (response == null || !response.getStatusCode().is2xxSuccessful()) {
-			int status = response == null ? -1 : response.getStatusCodeValue();
-			throw new FeignAuthTokenException("Token request failed: " + status);
+		if (statusCode < 200 || statusCode >= 300) {
+			throw new FeignAuthTokenException("Token request failed: " + statusCode);
 		}
 		try {
-			JsonNode root = this.objectMapper.readTree(response.getBody() == null ? "" : response.getBody());
+			JsonNode root = this.objectMapper.readTree(body == null ? "" : body);
 			String token = extractAccessToken(root, tokenField);
 			long expiresIn = resolveExpiresInSeconds(root, configuredExpiresInSeconds);
 			// Clamp so refreshIn is always >= 1: a 0-second TTL breaks Redis SETEX

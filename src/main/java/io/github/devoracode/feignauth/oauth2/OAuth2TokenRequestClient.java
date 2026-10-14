@@ -1,20 +1,33 @@
 package io.github.devoracode.feignauth.oauth2;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties;
 import io.github.devoracode.feignauth.exception.FeignAuthConfigurationException;
+import io.github.devoracode.feignauth.exception.FeignAuthTokenException;
 import io.github.devoracode.feignauth.header.HeaderManager;
 import org.apache.commons.lang3.StringUtils;
-import org.springframework.http.HttpEntity;
+import org.apache.http.client.config.RequestConfig;
+import org.apache.http.client.methods.CloseableHttpResponse;
+import org.apache.http.client.methods.HttpGet;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.client.methods.HttpUriRequest;
+import org.apache.http.client.utils.URIBuilder;
+import org.apache.http.entity.ContentType;
+import org.apache.http.entity.StringEntity;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClientBuilder;
+import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
+import org.apache.http.util.EntityUtils;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpMethod;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
 import org.springframework.util.Assert;
-import org.springframework.web.client.RestTemplate;
-import org.springframework.web.util.UriComponentsBuilder;
 
+import java.io.IOException;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Executes OAuth2 token requests using configured HTTP methods and request field names.
@@ -24,18 +37,18 @@ import java.util.Map;
  */
 public class OAuth2TokenRequestClient {
 
-	private final RestTemplate restTemplate;
+	private final CloseableHttpClient httpClient;
 
 	private final OAuth2TokenResponseParser responseParser;
 
 	private final HeaderManager headerManager;
 
-	public OAuth2TokenRequestClient(RestTemplate restTemplate, OAuth2TokenResponseParser responseParser,
-	                                HeaderManager headerManager) {
-		Assert.notNull(restTemplate, "restTemplate must not be null");
+	private final ObjectMapper objectMapper = new ObjectMapper();
+
+	public OAuth2TokenRequestClient(OAuth2TokenResponseParser responseParser, HeaderManager headerManager) {
 		Assert.notNull(responseParser, "responseParser must not be null");
 		Assert.notNull(headerManager, "headerManager must not be null");
-		this.restTemplate = restTemplate;
+		this.httpClient = createHttpClient();
 		this.responseParser = responseParser;
 		this.headerManager = headerManager;
 	}
@@ -71,28 +84,79 @@ public class OAuth2TokenRequestClient {
 
 	private OAuth2AccessToken requestTokenByGet(String serviceName, FeignAuthProperties.Service service,
 			FeignAuthProperties.Auth auth, FeignAuthProperties.Client client, Map<String, String> parameters) {
-		UriComponentsBuilder builder = UriComponentsBuilder.fromHttpUrl(auth.getTokenUrl());
-		parameters.forEach(builder::queryParam);
-
 		HttpHeaders headers = this.headerManager.buildTokenHeaders(serviceName, service, client, parameters);
 
-		ResponseEntity<String> response = this.restTemplate.exchange(builder.toUriString(), HttpMethod.GET,
-				new HttpEntity<>(headers), String.class);
-		return this.responseParser.parse(response, auth.getExpireAheadSeconds(), auth.getTokenField(),
-				auth.getTokenExpiresInSeconds());
+		URI uri;
+		try {
+			URIBuilder builder = new URIBuilder(auth.getTokenUrl());
+			parameters.forEach(builder::addParameter);
+			uri = builder.build();
+		}
+		catch (URISyntaxException ex) {
+			throw new FeignAuthConfigurationException("Invalid token-url: " + auth.getTokenUrl());
+		}
+
+		HttpGet request = new HttpGet(uri);
+		copyHeaders(headers, request);
+		return execute(request, auth);
 	}
 
 	private OAuth2AccessToken requestTokenByPost(String serviceName, FeignAuthProperties.Service service,
 			FeignAuthProperties.Auth auth, FeignAuthProperties.Client client, Map<String, String> parameters) {
-		Map<String, String> body = buildTokenRequestParameters(auth, client);
-
 		HttpHeaders headers = this.headerManager.buildTokenHeaders(serviceName, service, client, parameters);
-		headers.setContentType(MediaType.APPLICATION_JSON);
 
-		ResponseEntity<String> response = this.restTemplate.postForEntity(auth.getTokenUrl(),
-				new HttpEntity<>(body, headers), String.class);
-		return this.responseParser.parse(response, auth.getExpireAheadSeconds(), auth.getTokenField(),
-				auth.getTokenExpiresInSeconds());
+		HttpPost request = new HttpPost(auth.getTokenUrl());
+		copyHeaders(headers, request);
+		request.setEntity(new StringEntity(writeJson(parameters), ContentType.APPLICATION_JSON));
+		return execute(request, auth);
+	}
+
+	private OAuth2AccessToken execute(HttpUriRequest request, FeignAuthProperties.Auth auth) {
+		try (CloseableHttpResponse response = this.httpClient.execute(request)) {
+			int statusCode = response.getStatusLine().getStatusCode();
+			String body = response.getEntity() == null ? null
+					: EntityUtils.toString(response.getEntity(), StandardCharsets.UTF_8);
+			return this.responseParser.parse(statusCode, body, auth.getExpireAheadSeconds(), auth.getTokenField(),
+					auth.getTokenExpiresInSeconds());
+		}
+		catch (IOException ex) {
+			throw new FeignAuthTokenException("Token request failed: " + ex.getMessage(), ex);
+		}
+	}
+
+	private String writeJson(Map<String, String> parameters) {
+		try {
+			return this.objectMapper.writeValueAsString(parameters);
+		}
+		catch (IOException ex) {
+			throw new FeignAuthTokenException("Serialize token request failed", ex);
+		}
+	}
+
+	private static void copyHeaders(HttpHeaders source, HttpUriRequest target) {
+		source.forEach((name, values) -> {
+			for (String value : values) {
+				target.addHeader(name, value);
+			}
+		});
+	}
+
+	private static CloseableHttpClient createHttpClient() {
+		PoolingHttpClientConnectionManager connectionManager = new PoolingHttpClientConnectionManager();
+		connectionManager.setMaxTotal(200);
+		connectionManager.setDefaultMaxPerRoute(50);
+
+		RequestConfig requestConfig = RequestConfig.custom()
+				.setConnectTimeout(5000)
+				.setConnectionRequestTimeout(5000)
+				.setSocketTimeout(10000)
+				.build();
+
+		return HttpClientBuilder.create()
+				.setConnectionManager(connectionManager)
+				.setDefaultRequestConfig(requestConfig)
+				.evictIdleConnections(30, TimeUnit.SECONDS)
+				.build();
 	}
 
 	private static Map<String, String> buildTokenRequestParameters(FeignAuthProperties.Auth auth,
@@ -107,7 +171,8 @@ public class OAuth2TokenRequestClient {
 
 		if (StringUtils.isBlank(fields.getClientId()) && StringUtils.isBlank(fields.getClientSecret())) {
 			parameters.put("grant_type", StringUtils.defaultString(client.getGrantType(), "client_credentials"));
-		} else if (StringUtils.isNotBlank(fields.getGrantType()) && StringUtils.isNotBlank(client.getGrantType())) {
+		}
+		else if (StringUtils.isNotBlank(fields.getGrantType()) && StringUtils.isNotBlank(client.getGrantType())) {
 			parameters.put(fields.getGrantType(), client.getGrantType());
 		}
 		return parameters;

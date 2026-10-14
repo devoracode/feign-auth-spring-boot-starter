@@ -56,7 +56,7 @@ public class HeaderManager {
 	 * Builds the additional headers for a Feign business request and writes them into
 	 * the provided {@link RequestTemplate}.
 	 *
-	 * <p>Stage 1 reads {@link FeignAuthProperties.Auth#getRequestHeaders()}.
+	 * <p>Stage 1 reads the map from {@code FeignAuthProperties.Auth.getRequestHeaders()}.
 	 * Stage 2 calls {@link HeaderCustomizer#customize(RequestContext, HttpHeaders)}
 	 * on every matching customizer.
 	 *
@@ -97,7 +97,7 @@ public class HeaderManager {
 	/**
 	 * Builds the {@link HttpHeaders} for an OAuth2 token HTTP request.
 	 *
-	 * <p>Stage 1 reads {@link FeignAuthProperties.Auth#getTokenRequestHeaders()}.
+	 * <p>Stage 1 reads the map from {@code FeignAuthProperties.Auth.getTokenRequestHeaders()}.
 	 * Stage 2 calls {@link HeaderCustomizer#customize(TokenRequestContext, HttpHeaders)}
 	 * on every matching customizer.
 	 *
