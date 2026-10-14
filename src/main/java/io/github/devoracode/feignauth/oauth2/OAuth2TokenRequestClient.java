@@ -25,6 +25,7 @@ import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -35,7 +36,7 @@ import java.util.concurrent.TimeUnit;
  * @author Wenjie Liu
  * @since 1.0.0
  */
-public class OAuth2TokenRequestClient {
+public class OAuth2TokenRequestClient implements AutoCloseable {
 
 	private final CloseableHttpClient httpClient;
 
@@ -45,10 +46,12 @@ public class OAuth2TokenRequestClient {
 
 	private final ObjectMapper objectMapper = new ObjectMapper();
 
-	public OAuth2TokenRequestClient(OAuth2TokenResponseParser responseParser, HeaderManager headerManager) {
+	public OAuth2TokenRequestClient(OAuth2TokenResponseParser responseParser, HeaderManager headerManager,
+			FeignAuthProperties.Http http) {
 		Assert.notNull(responseParser, "responseParser must not be null");
 		Assert.notNull(headerManager, "headerManager must not be null");
-		this.httpClient = createHttpClient();
+		Assert.notNull(http, "http must not be null");
+		this.httpClient = createHttpClient(http);
 		this.responseParser = responseParser;
 		this.headerManager = headerManager;
 	}
@@ -141,15 +144,21 @@ public class OAuth2TokenRequestClient {
 		});
 	}
 
-	private static CloseableHttpClient createHttpClient() {
+	// 容器（@Bean 推断 destroyMethod）或调用方显式关闭；CloseableHttpClient.close() 会一并关闭连接池
+	@Override
+	public void close() throws IOException {
+		this.httpClient.close();
+	}
+
+	private static CloseableHttpClient createHttpClient(FeignAuthProperties.Http http) {
 		PoolingHttpClientConnectionManager connectionManager = new PoolingHttpClientConnectionManager();
-		connectionManager.setMaxTotal(200);
-		connectionManager.setDefaultMaxPerRoute(50);
+		connectionManager.setMaxTotal(http.getMaxTotal());
+		connectionManager.setDefaultMaxPerRoute(http.getDefaultMaxPerRoute());
 
 		RequestConfig requestConfig = RequestConfig.custom()
-				.setConnectTimeout(5000)
-				.setConnectionRequestTimeout(5000)
-				.setSocketTimeout(10000)
+				.setConnectTimeout(toMillis(http.getConnectTimeout()))
+				.setConnectionRequestTimeout(toMillis(http.getConnectionRequestTimeout()))
+				.setSocketTimeout(toMillis(http.getSocketTimeout()))
 				.build();
 
 		return HttpClientBuilder.create()
@@ -157,6 +166,11 @@ public class OAuth2TokenRequestClient {
 				.setDefaultRequestConfig(requestConfig)
 				.evictIdleConnections(30, TimeUnit.SECONDS)
 				.build();
+	}
+
+	private static int toMillis(Duration timeout) {
+		// 超过 int 上限的超大时长截断为 Integer.MAX_VALUE（HttpClient 参数为 int 毫秒）
+		return (int) Math.min(Math.max(timeout.toMillis(), 0L), Integer.MAX_VALUE);
 	}
 
 	private static Map<String, String> buildTokenRequestParameters(FeignAuthProperties.Auth auth,

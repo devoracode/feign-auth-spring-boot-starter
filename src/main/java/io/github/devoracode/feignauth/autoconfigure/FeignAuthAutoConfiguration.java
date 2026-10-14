@@ -110,12 +110,18 @@ public class FeignAuthAutoConfiguration {
     static class TokenFetcherConfiguration {
 
         @Bean
+        @ConditionalOnMissingBean
+        OAuth2TokenRequestClient oAuth2TokenRequestClient(ObjectMapper objectMapper, HeaderManager headerManager,
+                                                          FeignAuthProperties properties) {
+            // 注册为容器 Bean：close() 会被推断为 destroyMethod，上下文关闭时释放连接池
+            return new OAuth2TokenRequestClient(new OAuth2TokenResponseParser(objectMapper), headerManager,
+                properties.getAuth().getHttp());
+        }
+
+        @Bean
         TokenFetcher tokenFetcher(FeignAuthProperties properties, OAuth2ClientMatcher clientMatcher,
-                                  ObjectMapper objectMapper, HeaderManager headerManager,
-                                  TokenStore tokenStore, LockProvider lockProvider) {
-            OAuth2TokenResponseParser responseParser = new OAuth2TokenResponseParser(objectMapper);
-            OAuth2TokenRequestClient tokenRequestClient = new OAuth2TokenRequestClient(responseParser,
-                headerManager);
+                                  HeaderManager headerManager, TokenStore tokenStore, LockProvider lockProvider,
+                                  OAuth2TokenRequestClient tokenRequestClient) {
             return new TokenFetcher(properties, clientMatcher, tokenRequestClient, tokenStore, lockProvider);
         }
 

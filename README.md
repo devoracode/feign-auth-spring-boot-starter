@@ -129,6 +129,23 @@ feign:
 
 ---
 
+## 令牌请求 HTTP 客户端
+
+OAuth2 取号走 starter 内置的 Apache HttpClient（连接池复用），参数通过 `feign.auth.http` 全局配置：
+
+```yaml
+feign:
+  auth:
+    http:
+      connect-timeout: 5s                 # 连接超时
+      connection-request-timeout: 5s      # 从连接池获取连接的等待超时
+      socket-timeout: 10s                 # 读取超时
+      max-total: 200                      # 连接池最大连接数
+      default-max-per-route: 50           # 每个路由最大连接数
+```
+
+该客户端注册为 Spring 容器管理的 Bean，应用上下文关闭时自动 `close()` 释放连接池与空闲连接驱逐线程。如需替换实现（例如换用其他 HTTP 客户端），直接声明自己的 `OAuth2TokenRequestClient` Bean 即可，starter 默认实现会自动让位并被默认 `TokenFetcher` 采用。
+
 ## API Key 配置
 
 ```yaml

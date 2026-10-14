@@ -14,6 +14,11 @@
       "name": "feign.auth.cache",
       "type": "io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties$Cache",
       "sourceType": "io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties"
+    },
+    {
+      "name": "feign.auth.http",
+      "type": "io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties$Http",
+      "sourceType": "io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties"
     }
   ],
   "properties": [
@@ -157,6 +162,36 @@
       "type": "java.lang.String",
       "description": "Redis key prefix used for both token cache and distributed lock keys. Token keys will be formatted as {prefix}token:{key}, lock keys as {prefix}lock:{key}.",
       "defaultValue": "feign-auth:"
+    },
+    {
+      "name": "feign.auth.http.connect-timeout",
+      "type": "java.time.Duration",
+      "description": "Connect timeout for the built-in Apache HttpClient used for OAuth2 token requests.",
+      "defaultValue": "5s"
+    },
+    {
+      "name": "feign.auth.http.connection-request-timeout",
+      "type": "java.time.Duration",
+      "description": "Timeout for obtaining a connection from the built-in token request connection pool.",
+      "defaultValue": "5s"
+    },
+    {
+      "name": "feign.auth.http.socket-timeout",
+      "type": "java.time.Duration",
+      "description": "Socket (read) timeout for the built-in Apache HttpClient used for OAuth2 token requests.",
+      "defaultValue": "10s"
+    },
+    {
+      "name": "feign.auth.http.max-total",
+      "type": "java.lang.Integer",
+      "description": "Maximum total connections in the built-in token request connection pool.",
+      "defaultValue": 200
+    },
+    {
+      "name": "feign.auth.http.default-max-per-route",
+      "type": "java.lang.Integer",
+      "description": "Maximum connections per route in the built-in token request connection pool.",
+      "defaultValue": 50
     }
   ],
   "hints": [

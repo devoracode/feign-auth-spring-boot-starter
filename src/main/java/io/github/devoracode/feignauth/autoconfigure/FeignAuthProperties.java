@@ -6,6 +6,7 @@ import lombok.Setter;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -32,7 +33,28 @@ public class FeignAuthProperties {
 
         private Cache cache = new Cache();
 
+        private Http http = new Http();
+
         private boolean failOnNoMatch = true;
+
+    }
+
+    /**
+     * OAuth2 令牌请求内置 Apache HttpClient 的连接池与超时配置。
+     */
+    @Getter
+    @Setter
+    public static class Http {
+
+        private Duration connectTimeout = Duration.ofSeconds(5);
+
+        private Duration connectionRequestTimeout = Duration.ofSeconds(5);
+
+        private Duration socketTimeout = Duration.ofSeconds(10);
+
+        private int maxTotal = 200;
+
+        private int defaultMaxPerRoute = 50;
 
     }
 

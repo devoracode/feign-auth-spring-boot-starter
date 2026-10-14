@@ -105,7 +105,8 @@ class FeignAuthErrorDecoderTest {
 		private int requestCount;
 
 		private CountingTokenRequestClient() {
-			super(new OAuth2TokenResponseParser(new ObjectMapper()), new HeaderManager());
+			super(new OAuth2TokenResponseParser(new ObjectMapper()), new HeaderManager(),
+					new FeignAuthProperties.Http());
 		}
 
 		@Override

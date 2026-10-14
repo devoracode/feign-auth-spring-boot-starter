@@ -51,7 +51,7 @@ class TokenFetcherTest {
 	private static TokenFetcher createTokenFetcher(FeignAuthProperties properties) {
 		ObjectMapper objectMapper = new ObjectMapper();
 		OAuth2TokenRequestClient tokenRequestClient = new OAuth2TokenRequestClient(
-				new OAuth2TokenResponseParser(objectMapper), new HeaderManager());
+				new OAuth2TokenResponseParser(objectMapper), new HeaderManager(), new FeignAuthProperties.Http());
 		TokenStore tokenStore = new LocalTokenStore();
 		LockProvider lockProvider = new LocalLockProvider();
 		return new TokenFetcher(properties, new OAuth2ClientMatcher(), tokenRequestClient, tokenStore, lockProvider);
