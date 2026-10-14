@@ -15,6 +15,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.HashMap;
@@ -104,6 +105,37 @@ class OAuth2TokenRequestClientTest {
 		assertThatThrownBy(() -> client.requestToken("svc", service, clientCredentials()))
 				.isInstanceOf(FeignAuthConfigurationException.class)
 				.hasStackTraceContaining("Content-Type");
+	}
+
+	@Test
+	void responseDecodedWithDeclaredCharset() {
+		this.server.createContext("/token", exchange -> {
+			try {
+				byte[] bytes = "{\"access_token\":\"令牌-α\",\"expires_in\":600}".getBytes(Charset.forName("GBK"));
+				exchange.getResponseHeaders().add("Content-Type", "application/json;charset=GBK");
+				exchange.sendResponseHeaders(200, bytes.length);
+				try (OutputStream os = exchange.getResponseBody()) {
+					os.write(bytes);
+				}
+			}
+			catch (IOException ex) {
+				// ignore
+			}
+		});
+
+		OAuth2TokenRequestClient client = createClient(new FeignAuthProperties.Http());
+		OAuth2AccessToken token = client.requestToken("svc", service(this.tokenUrl), clientCredentials());
+		assertThat(token.getAccessToken()).isEqualTo("令牌-α");
+	}
+
+	@Test
+	void responseWithoutDeclaredCharsetFallsBackToUtf8() {
+		this.server.createContext("/token",
+				exchange -> respond(exchange, 200, "{\"access_token\":\"令牌-α\",\"expires_in\":600}"));
+
+		OAuth2TokenRequestClient client = createClient(new FeignAuthProperties.Http());
+		OAuth2AccessToken token = client.requestToken("svc", service(this.tokenUrl), clientCredentials());
+		assertThat(token.getAccessToken()).isEqualTo("令牌-α");
 	}
 
 	private OAuth2TokenRequestClient createClient(FeignAuthProperties.Http http) {

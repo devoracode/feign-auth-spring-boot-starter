@@ -164,14 +164,23 @@ public class OAuth2TokenRequestClient implements AutoCloseable {
 	private OAuth2AccessToken execute(HttpUriRequest request, FeignAuthProperties.Auth auth) {
 		try (CloseableHttpResponse response = this.httpClient.execute(request)) {
 			int statusCode = response.getStatusLine().getStatusCode();
-			String body = response.getEntity() == null ? null
-					: EntityUtils.toString(response.getEntity(), StandardCharsets.UTF_8);
+			HttpEntity entity = response.getEntity();
+			String body = entity == null ? null : EntityUtils.toString(entity, resolveResponseCharset(entity));
 			return this.responseParser.parse(statusCode, body, auth.getExpireAheadSeconds(), auth.getTokenField(),
 					auth.getTokenExpiresInSeconds());
 		}
 		catch (IOException ex) {
 			throw new FeignAuthTokenException("Token request failed: " + ex.getMessage(), ex);
 		}
+	}
+
+	// 响应声明的字符集优先，未声明（或无法解析）按 UTF-8
+	private static Charset resolveResponseCharset(HttpEntity entity) {
+		ContentType contentType = ContentType.get(entity);
+		if (contentType != null && contentType.getCharset() != null) {
+			return contentType.getCharset();
+		}
+		return StandardCharsets.UTF_8;
 	}
 
 	private String writeJson(Map<String, String> parameters) {

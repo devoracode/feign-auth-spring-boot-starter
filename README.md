@@ -131,7 +131,7 @@ POST 取号的请求体编码由 `token-request-headers` 中的 `Content-Type` �
 
 ### Token 响应解析
 
-**Token 字段**：默认依次尝试 `access_token` → `accessToken` → `token`；可通过 `token-field` 指定点分路径（如 `data.accessToken`）。
+**Token 字段**：默认依次尝试 `access_token` → `accessToken` → `token`；可通过 `token-field` 指定点分路径（如 `data.accessToken`）。响应体解码优先使用响应 `Content-Type` 声明的字符集，未声明时按 UTF-8。
 
 **过期时间**：默认从响应 JSON 中逐层查找（最多 3 层） `expires_in` → `expiresIn` → `expire_in` → `expireIn`；可通过 `token-expires-in-seconds` 显式指定；未找到时默认 7200 秒。刷新窗口保证至少 1 秒：当 `expire-ahead-seconds` ≥ 实际有效期时自动收敛，避免缓存条目立即过期或 Redis TTL 非法。生效 TTL 上限为 1 天（86400 秒）：超长有效期（含误把毫秒当秒返回的异常值）一律按 1 天缓存并每日刷新，同时杜绝时间戳溢出导致的"每请求刷新"问题。
 
