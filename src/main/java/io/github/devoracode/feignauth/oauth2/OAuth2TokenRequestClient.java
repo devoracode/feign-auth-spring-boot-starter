@@ -223,6 +223,9 @@ public class OAuth2TokenRequestClient implements AutoCloseable {
 				.setConnectionManager(connectionManager)
 				.setDefaultRequestConfig(requestConfig)
 				.evictIdleConnections(30, TimeUnit.SECONDS)
+				// 默认会对幂等 GET 静默重试，并跟随 3xx 把 client 凭证重放到 Location 指向的地址
+				.disableAutomaticRetries()
+				.disableRedirectHandling()
 				.build();
 	}
 

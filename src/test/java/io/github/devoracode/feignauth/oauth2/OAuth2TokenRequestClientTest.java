@@ -20,6 +20,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -151,6 +152,51 @@ class OAuth2TokenRequestClientTest {
 				.hasMessageContaining("400")
 				.hasMessageContaining("unauthorized_client")
 				.hasMessageContaining("grant_type not allowed");
+	}
+
+	@Test
+	void getTokenRequestIsNotRetriedAutomaticallyAfterIoFailure() {
+		AtomicInteger hits = new AtomicInteger();
+		this.server.createContext("/token", exchange -> {
+			if (hits.incrementAndGet() == 1) {
+				// 不写响应直接断开，令 HttpClient 把幂等 GET 判定为可自动重试
+				exchange.close();
+				return;
+			}
+			respond(exchange, 200, "{\"access_token\":\"t\",\"expires_in\":600}");
+		});
+
+		FeignAuthProperties.Service service = service(this.tokenUrl);
+		service.getAuth().setMethod("get");
+		OAuth2TokenRequestClient client = createClient(new FeignAuthProperties.Http());
+
+		assertThatThrownBy(() -> client.requestToken("svc", service, clientCredentials()))
+				.isInstanceOf(FeignAuthTokenException.class);
+		assertThat(hits.get()).isEqualTo(1);
+	}
+
+	@Test
+	void getTokenRequestDoesNotFollowRedirect() {
+		// 跟随 302 会把带 client 凭证的请求重放到 Location 指向的地址
+		AtomicInteger redirectHits = new AtomicInteger();
+		this.server.createContext("/token", exchange -> {
+			exchange.getResponseHeaders().add("Location",
+					"http://127.0.0.1:" + this.server.getAddress().getPort() + "/elsewhere");
+			respond(exchange, 302, "");
+		});
+		this.server.createContext("/elsewhere", exchange -> {
+			redirectHits.incrementAndGet();
+			respond(exchange, 200, "{\"access_token\":\"t\",\"expires_in\":600}");
+		});
+
+		FeignAuthProperties.Service service = service(this.tokenUrl);
+		service.getAuth().setMethod("get");
+		OAuth2TokenRequestClient client = createClient(new FeignAuthProperties.Http());
+
+		assertThatThrownBy(() -> client.requestToken("svc", service, clientCredentials()))
+				.isInstanceOf(FeignAuthTokenException.class)
+				.hasMessageContaining("302");
+		assertThat(redirectHits.get()).isEqualTo(0);
 	}
 
 	@Test
