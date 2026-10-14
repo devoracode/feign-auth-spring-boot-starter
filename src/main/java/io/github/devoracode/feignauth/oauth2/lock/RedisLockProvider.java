@@ -2,6 +2,8 @@ package io.github.devoracode.feignauth.oauth2.lock;
 
 import io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties;
 import io.github.devoracode.feignauth.exception.FeignAuthTokenException;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 
@@ -11,6 +13,8 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.TimeUnit;
 
 public class RedisLockProvider implements LockProvider {
+
+    private static final Log logger = LogFactory.getLog(RedisLockProvider.class);
 
     private static final String LOCK_SUFFIX = "lock:";
     private static final int DEFAULT_MAX_RETRIES = 60;
@@ -55,7 +59,13 @@ public class RedisLockProvider implements LockProvider {
             throw new FeignAuthTokenException("Error executing with lock for key: " + key, e);
         } finally {
             if (locked) {
-                unlock(lockKey, requestId);
+                try {
+                    unlock(lockKey, requestId);
+                } catch (Exception ex) {
+                    // Never mask the original outcome; the lock expires by TTL anyway.
+                    logger.warn("FeignAuth [redis-lock] unlock failed for key: " + key
+                            + ", lock will expire after " + DEFAULT_LOCK_TTL_SECONDS + "s", ex);
+                }
             }
         }
     }

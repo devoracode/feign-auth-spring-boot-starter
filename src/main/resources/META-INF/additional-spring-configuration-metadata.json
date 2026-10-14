@@ -74,7 +74,7 @@
     {
       "name": "feign.services.*.auth.expired-token-statuses",
       "type": "java.util.List<java.lang.Integer>",
-      "description": "HTTP status codes that trigger token refresh retry. Defaults to [410, 421, 423]."
+      "description": "HTTP status codes that trigger token refresh retry. Defaults to [401, 421, 423]."
     },
     {
       "name": "feign.services.*.auth.response-status-field",
@@ -94,17 +94,17 @@
     {
       "name": "feign.services.*.auth.request-fields.client-id",
       "type": "java.lang.String",
-      "description": "OAuth2 request field name for client id. When not set, defaults to clientId."
+      "description": "OAuth2 request field name for client id. When not set, defaults to client_id."
     },
     {
       "name": "feign.services.*.auth.request-fields.client-secret",
       "type": "java.lang.String",
-      "description": "OAuth2 request field name for client secret. When not set, defaults to clientSecret."
+      "description": "OAuth2 request field name for client secret. When not set, defaults to client_secret."
     },
     {
       "name": "feign.services.*.auth.request-fields.grant-type",
       "type": "java.lang.String",
-      "description": "OAuth2 request field name for grant type. When not set, the grant-type parameter is omitted from the token request."
+      "description": "OAuth2 request field name for grant type. Only used when custom client-id/client-secret field names are configured; with default field names the parameter is always sent as grant_type."
     },
     {
       "name": "feign.services.*.auth.clients",
@@ -124,7 +124,7 @@
     {
       "name": "feign.services.*.auth.clients[].grant-type",
       "type": "java.lang.String",
-      "description": "OAuth2 grant type value. When not set, the grant-type parameter is omitted from the token request."
+      "description": "OAuth2 grant type value. Defaults to client_credentials when the default request field names are used; omitted when custom field names are configured and this value is not set."
     },
     {
       "name": "feign.services.*.auth.clients[].path-prefixes",
@@ -189,7 +189,7 @@
       "values": [
         {
           "value": "local",
-          "description": "Use in-memory ConcurrentHashMap for token storage and synchronized locks."
+          "description": "Use in-memory ConcurrentHashMap for token storage and striped ReentrantLocks."
         },
         {
           "value": "redis",

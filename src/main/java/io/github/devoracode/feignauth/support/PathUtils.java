@@ -87,7 +87,10 @@ public final class PathUtils {
 
 	/**
 	 * Returns the length of the longest prefix in {@code prefixes} that matches the start of
-	 * {@code requestPath}, or {@code 0} when none matches.
+	 * {@code requestPath} at a path segment boundary, or {@code 0} when none matches.
+	 *
+	 * <p>A prefix only matches when the request path equals it or continues with {@code /},
+	 * so {@code /api/measure} does not match {@code /api/measurement/1}.
 	 *
 	 * <p><b>Examples:</b></p>
 	 * <pre>{@code
@@ -96,6 +99,7 @@ public final class PathUtils {
 	 * PathUtils.bestPrefixMatchLength(prefixes, "/api/v1/users")   // 7 ("/api/v1")
 	 * PathUtils.bestPrefixMatchLength(prefixes, "/api/v2/orders")  // 7 ("/api/v2")
 	 * PathUtils.bestPrefixMatchLength(prefixes, "/api/other")      // 4 ("/api")
+	 * PathUtils.bestPrefixMatchLength(prefixes, "/apix/other")     // 0 (not a segment boundary)
 	 * PathUtils.bestPrefixMatchLength(prefixes, "/other/path")     // 0
 	 * PathUtils.bestPrefixMatchLength(prefixes, "")                // 0
 	 * PathUtils.bestPrefixMatchLength(null, "/api/v1")             // 0
@@ -111,8 +115,19 @@ public final class PathUtils {
 		}
 		int best = 0;
 		for (String prefix : prefixes) {
-			String normalizedPrefix = normalizePath(prefix);
-			if (StringUtils.isNotBlank(normalizedPrefix) && requestPath.startsWith(normalizedPrefix)) {
+			String normalizedPrefix = StringUtils.stripEnd(normalizePath(prefix), "/");
+			if (StringUtils.isBlank(normalizedPrefix)) {
+				// prefix "/" is a root match-all; keep its legacy length-1 semantics
+				if (requestPath.startsWith("/")) {
+					best = Math.max(best, 1);
+				}
+				continue;
+			}
+			boolean matches = requestPath.length() == normalizedPrefix.length()
+					? requestPath.equals(normalizedPrefix)
+					: requestPath.startsWith(normalizedPrefix)
+							&& requestPath.charAt(normalizedPrefix.length()) == '/';
+			if (matches) {
 				best = Math.max(best, normalizedPrefix.length());
 			}
 		}

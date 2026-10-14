@@ -205,6 +205,7 @@ final class FeignAuthStatusHandler {
 
 	private Exception handleExpiredToken(Response response, ResolvedService resolved, ResolvedRequest request,
 			Integer detectedStatus) {
+
 		boolean evicted = this.tokenFetcher.invalidateToken(resolved.getServiceName(), request.getRequestPath());
 		String message = "FeignAuth: service '" + resolved.getServiceName() + "' returned " + detectedStatus
 				+ ", OAuth2 token cache evicted=" + evicted + ", retrying request";
