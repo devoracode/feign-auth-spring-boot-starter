@@ -62,7 +62,7 @@ public class RedisLockProvider implements LockProvider {
                 try {
                     unlock(lockKey, requestId);
                 } catch (Exception ex) {
-                    // Never mask the original outcome; the lock expires by TTL anyway.
+                    // 绝不掩盖原本的执行结果；锁本身会随 TTL 自动过期。
                     logger.warn("FeignAuth [redis-lock] unlock failed for key: " + key
                             + ", lock will expire after " + DEFAULT_LOCK_TTL_SECONDS + "s", ex);
                 }

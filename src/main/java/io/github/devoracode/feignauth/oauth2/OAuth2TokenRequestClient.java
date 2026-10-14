@@ -30,7 +30,7 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Executes OAuth2 token requests using configured HTTP methods and request field names.
+ * 使用配置的 HTTP 方法与请求字段名执行 OAuth2 令牌请求。
  *
  * @author Wenjie Liu
  * @since 1.0.0
@@ -54,11 +54,11 @@ public class OAuth2TokenRequestClient {
 	}
 
 	/**
-	 * Requests a new OAuth2 access token for the given service and client.
-	 * @param serviceName the logical service name
-	 * @param service the service configuration
-	 * @param client the OAuth2 client credentials
-	 * @return a populated access token
+	 * 为给定服务与 Client 请求新的 OAuth2 访问令牌。
+	 * @param serviceName 逻辑服务名
+	 * @param service 服务配置
+	 * @param client OAuth2 客户端凭证
+	 * @return 装配完成的访问令牌
 	 */
 	public OAuth2AccessToken requestToken(String serviceName, FeignAuthProperties.Service service,
 			FeignAuthProperties.Client client) {

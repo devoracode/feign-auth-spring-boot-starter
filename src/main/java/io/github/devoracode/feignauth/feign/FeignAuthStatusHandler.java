@@ -22,8 +22,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.Date;
 
 /**
- * Handles HTTP error responses for Feign requests, including OAuth2 token eviction
- * on expired-token status codes and clear error messages for common HTTP errors.
+ * 处理 Feign 请求的 HTTP 错误响应，包括在 token 过期状态码下淘汰
+ * OAuth2 令牌缓存，并为常见 HTTP 错误生成清晰的错误信息。
  *
  * @author Wenjie Liu
  * @since 1.0.0
@@ -48,13 +48,13 @@ final class FeignAuthStatusHandler {
 	}
 
 	/**
-	 * Handle an HTTP error response.
-	 * <p>When the status is 421 or 423 and the service uses OAuth2, the cached token
-	 * is evicted and a {@link RetryableException} is returned to trigger a retry.
-	 * For other 4xx/5xx statuses a descriptive {@link FeignAuthTokenException} is returned.
-	 * @param methodKey the Feign method key (used to build the cause exception)
-	 * @param response the Feign response
-	 * @return an exception to propagate, or {@code null} when the status is below 400
+	 * 处理 HTTP 错误响应。
+	 * <p>当状态码为 421 或 423 且服务使用 OAuth2 时，会淘汰缓存的 token 并返回
+	 * {@link RetryableException} 以触发重试。对于其他 4xx/5xx 状态码，返回带有
+	 * 描述信息的 {@link FeignAuthTokenException}。
+	 * @param methodKey Feign 方法键（用于构造 cause 异常）
+	 * @param response Feign 响应
+	 * @return 需要向上抛出的异常；状态码低于 400 时返回 {@code null}
 	 */
 	Exception handle(String methodKey, Response response) {
 		if (response == null || response.request() == null) {
@@ -66,12 +66,12 @@ final class FeignAuthStatusHandler {
 		ResolvedService resolved = (request != null)
 				? this.serviceMatcher.match(request.getBaseUrl(), request.getRequestPath()) : null;
 
-		// Check if need to inspect response body
+		// 检查是否需要读取响应体
 		byte[] bodyBytes = null;
 		if (needResponseBodyCheck(resolved, status) && response.body() != null) {
 			try {
 				bodyBytes = Util.toByteArray(response.body().asInputStream());
-				// Create a new Response with the body restored for later use
+				// 创建响应体已恢复的新 Response，供后续使用
 				response = response.toBuilder()
 						.body(bodyBytes)
 						.build();
@@ -82,7 +82,7 @@ final class FeignAuthStatusHandler {
 			}
 		}
 
-		// Check for expired token (HTTP status code or response body status)
+		// 检查 token 是否过期（HTTP 状态码或响应体状态）
 		Integer detectedStatus = detectExpiredTokenStatus(resolved, status, bodyBytes);
 		if (detectedStatus != null && isOAuth2Service(resolved)) {
 			return handleExpiredToken(response, resolved, request, detectedStatus);
@@ -123,21 +123,21 @@ final class FeignAuthStatusHandler {
 			return false;
 		}
 		FeignAuthProperties.Auth auth = resolved.getService().getAuth();
-		// Only check response body if:
-		// 1. HTTP status is not already an expired token status
-		// 2. This is an OAuth2 service
-		// 3. responseStatusField is explicitly configured
+		// 仅在以下条件同时满足时才检查响应体：
+		// 1. HTTP 状态码本身不是 token 过期状态
+		// 2. 该服务为 OAuth2 服务
+		// 3. 已显式配置 responseStatusField
 		return !isExpiredTokenStatus(resolved, status) && isOAuth2Service(resolved)
 				&& StringUtils.isNotBlank(auth.getResponseStatusField());
 	}
 
 	private Integer detectExpiredTokenStatus(ResolvedService resolved, int status, byte[] bodyBytes) {
-		// First check HTTP status code
+		// 首先检查 HTTP 状态码
 		if (isExpiredTokenStatus(resolved, status)) {
 			return status;
 		}
 
-		// Then check response body status if body is available
+		// 若响应体可用，再检查响应体中的状态
 		if (bodyBytes == null || bodyBytes.length == 0) {
 			return null;
 		}

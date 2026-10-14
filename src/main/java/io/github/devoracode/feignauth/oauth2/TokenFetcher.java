@@ -13,7 +13,7 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * Provides cached OAuth2 access tokens for configured Feign services.
+ * 为已配置的 Feign 服务提供带缓存的 OAuth2 访问令牌。
  *
  * @author Wenjie Liu
  * @since 1.0.0
@@ -48,10 +48,10 @@ public class TokenFetcher {
 	}
 
 	/**
-	 * Returns a valid OAuth2 access token for the given service and request path.
-	 * @param serviceName the logical service name
-	 * @param requestPath the normalized request path
-	 * @return a non-blank access token
+	 * 返回给定服务与请求路径对应的有效 OAuth2 访问令牌。
+	 * @param serviceName 逻辑服务名
+	 * @param requestPath 归一化后的请求路径
+	 * @return 非空的访问令牌
 	 */
 	public String getToken(String serviceName, String requestPath) {
 		FeignAuthProperties.Service service = getRequiredService(serviceName);
@@ -65,10 +65,10 @@ public class TokenFetcher {
 	}
 
 	/**
-	 * Invalidates the cached OAuth2 access token selected for the given request path.
-	 * @param serviceName the logical service name
-	 * @param requestPath the normalized request path
-	 * @return {@code true} when a cached token was removed
+	 * 使按给定请求路径选定的已缓存 OAuth2 访问令牌失效。
+	 * @param serviceName 逻辑服务名
+	 * @param requestPath 归一化后的请求路径
+	 * @return 当缓存令牌被移除时返回 {@code true}
 	 */
 	public boolean invalidateToken(String serviceName, String requestPath) {
 		FeignAuthProperties.Service service = getRequiredService(serviceName);
@@ -88,11 +88,11 @@ public class TokenFetcher {
 	}
 
 	/**
-	 * Selects the OAuth2 client that best matches the given request path.
-	 * @param serviceName the logical service name
-	 * @param service the service configuration
-	 * @param requestPath the normalized request path
-	 * @return the selected client
+	 * 选择与给定请求路径最匹配的 OAuth2 Client。
+	 * @param serviceName 逻辑服务名
+	 * @param service 服务配置
+	 * @param requestPath 归一化后的请求路径
+	 * @return 选中的 Client
 	 */
 	public FeignAuthProperties.Client resolveClient(String serviceName, FeignAuthProperties.Service service,
 			String requestPath) {

@@ -15,8 +15,7 @@ import org.springframework.util.Assert;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Feign client configuration that registers the authentication request interceptor,
- * error decoder, and retryer.
+ * 注册认证请求拦截器、错误解码器与重试器的 Feign 客户端配置。
  *
  * @author Wenjie Liu
  * @since 1.0.0

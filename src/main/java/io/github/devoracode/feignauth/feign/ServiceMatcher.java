@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Resolves configured services for outgoing Feign requests based on base URL and path.
+ * 基于基础 URL 与路径，为发出的 Feign 请求解析匹配的配置服务。
  *
  * @author Wenjie Liu
  * @since 1.0.0
@@ -26,10 +26,10 @@ public class ServiceMatcher {
 	}
 
 	/**
-	 * Resolves which configured service should handle the given request.
-	 * @param baseUrl the base URL of the Feign target
-	 * @param requestPath the normalized request path
-	 * @return the resolved service, or {@code null} when no service matches the base URL
+	 * 解析应当处理给定请求的配置服务。
+	 * @param baseUrl Feign target 的基础 URL
+	 * @param requestPath 归一化后的请求路径
+	 * @return 解析得到的服务；若没有服务匹配该基础 URL 则返回 {@code null}
 	 */
 	public ResolvedService match(String baseUrl, String requestPath) {
 		Map<String, FeignAuthProperties.Service> services = this.properties.getServices();

@@ -7,8 +7,8 @@ import java.util.concurrent.locks.ReentrantLock;
 
 public class LocalLockProvider implements LockProvider {
 
-    // Fixed stripe count avoids unbounded per-key lock objects and the racy
-    // inUse/timestamp cleanup that could evict a lock while a caller still held it.
+    // 固定的分段数避免了无上限的按 key 锁对象，以及可能在他方仍持有锁时
+    // 将其淘汰的、存在竞态的 inUse/时间戳清理逻辑。
     private static final int STRIPE_COUNT = 64;
 
     private final ReentrantLock[] stripes = new ReentrantLock[STRIPE_COUNT];
@@ -34,7 +34,7 @@ public class LocalLockProvider implements LockProvider {
 
     private static int stripeIndex(String key) {
         int hash = key == null ? 0 : key.hashCode();
-        // Math.abs(Integer.MIN_VALUE) stays negative, so mask instead
+        // Math.abs(Integer.MIN_VALUE) 结果仍为负数，因此改用位掩码
         return (hash & 0x7fffffff) % STRIPE_COUNT;
     }
 

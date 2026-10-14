@@ -5,25 +5,24 @@ import org.apache.commons.lang3.StringUtils;
 import java.util.List;
 
 /**
- * Utilities for normalizing request paths and matching configured path prefixes.
+ * 用于归一化请求路径并匹配已配置路径前缀的工具类。
  * <p>
- * This class provides methods for path normalization, base URL comparison,
- * and prefix matching — commonly used in Feign request routing.
+ * 本类提供路径归一化、基础 URL 比较与前缀匹配方法，常用于 Feign 请求路由。
  *
- * <h3>Examples</h3>
+ * <h3>示例</h3>
  * <pre>{@code
- * // Normalize a raw path
+ * // 归一化原始路径
  * String path = PathUtils.normalizePath("/api/users?page=1");
- * // result: "/api/users"
+ * // 结果："/api/users"
  *
- * // Compare base URLs (ignoring trailing slashes and case)
+ * // 比较基础 URL（忽略末尾斜杠与大小写）
  * boolean same = PathUtils.isSameBaseUrl("https://api.example.com/", "HTTPS://API.EXAMPLE.COM");
- * // result: true
+ * // 结果：true
  *
- * // Find longest matching prefix
+ * // 查找最长匹配前缀
  * List<String> prefixes = Arrays.asList("/api/v1", "/api/v2", "/api");
  * int len = PathUtils.bestPrefixMatchLength(prefixes, "/api/v1/users");
- * // result: 7 (length of "/api/v1")
+ * // 结果：7（"/api/v1" 的长度）
  * }</pre>
  *
  * @author Wenjie Liu
@@ -35,9 +34,9 @@ public final class PathUtils {
 	}
 
 	/**
-	 * Normalizes a path by ensuring it starts with {@code /} and stripping any query string.
+	 * 归一化路径：确保以 {@code /} 开头，并去除查询字符串。
 	 *
-	 * <p><b>Examples:</b></p>
+	 * <p><b>示例：</b></p>
 	 * <pre>{@code
 	 * PathUtils.normalizePath("/api/users")        // "/api/users"
 	 * PathUtils.normalizePath("api/users")         // "/api/users"
@@ -47,8 +46,8 @@ public final class PathUtils {
 	 * PathUtils.normalizePath(null)                // ""
 	 * }</pre>
 	 *
-	 * @param path the raw path
-	 * @return the normalized path, or an empty string when {@code path} is blank
+	 * @param path 原始路径
+	 * @return 归一化后的路径；{@code path} 为空白时返回空字符串
 	 */
 	public static String normalizePath(String path) {
 		if (StringUtils.isBlank(path)) {
@@ -63,9 +62,9 @@ public final class PathUtils {
 	}
 
 	/**
-	 * Compares two base URLs for equality, ignoring trailing slashes and case differences.
+	 * 比较两个基础 URL 是否相等，忽略末尾斜杠与大小写差异。
 	 *
-	 * <p><b>Examples:</b></p>
+	 * <p><b>示例：</b></p>
 	 * <pre>{@code
 	 * PathUtils.isSameBaseUrl("https://api.example.com", "https://api.example.com/") // true
 	 * PathUtils.isSameBaseUrl("HTTP://HOST.COM", "https://host.com")                  // true
@@ -74,9 +73,9 @@ public final class PathUtils {
 	 * PathUtils.isSameBaseUrl(null, "https://a.com")                                  // false
 	 * }</pre>
 	 *
-	 * @param left the first URL
-	 * @param right the second URL
-	 * @return {@code true} when both URLs refer to the same base URL
+	 * @param left 第一个 URL
+	 * @param right 第二个 URL
+	 * @return 当两个 URL 指向同一基础 URL 时返回 {@code true}
 	 */
 	public static boolean isSameBaseUrl(String left, String right) {
 		String normalizedLeft = StringUtils.stripEnd(StringUtils.strip(left), "/");
@@ -86,28 +85,28 @@ public final class PathUtils {
 	}
 
 	/**
-	 * Returns the length of the longest prefix in {@code prefixes} that matches the start of
-	 * {@code requestPath} at a path segment boundary, or {@code 0} when none matches.
+	 * 返回 {@code prefixes} 中能在路径段边界上匹配 {@code requestPath} 开头的
+	 * 最长前缀的长度；若均不匹配则返回 {@code 0}。
 	 *
-	 * <p>A prefix only matches when the request path equals it or continues with {@code /},
-	 * so {@code /api/measure} does not match {@code /api/measurement/1}.
+	 * <p>只有当请求路径与前缀完全相等或以 {@code /} 延续时才视为匹配，
+	 * 因此 {@code /api/measure} 不会匹配 {@code /api/measurement/1}。
 	 *
-	 * <p><b>Examples:</b></p>
+	 * <p><b>示例：</b></p>
 	 * <pre>{@code
 	 * List<String> prefixes = Arrays.asList("/api/v1", "/api/v2", "/api");
 	 *
 	 * PathUtils.bestPrefixMatchLength(prefixes, "/api/v1/users")   // 7 ("/api/v1")
 	 * PathUtils.bestPrefixMatchLength(prefixes, "/api/v2/orders")  // 7 ("/api/v2")
 	 * PathUtils.bestPrefixMatchLength(prefixes, "/api/other")      // 4 ("/api")
-	 * PathUtils.bestPrefixMatchLength(prefixes, "/apix/other")     // 0 (not a segment boundary)
+	 * PathUtils.bestPrefixMatchLength(prefixes, "/apix/other")     // 0（非段边界）
 	 * PathUtils.bestPrefixMatchLength(prefixes, "/other/path")     // 0
 	 * PathUtils.bestPrefixMatchLength(prefixes, "")                // 0
 	 * PathUtils.bestPrefixMatchLength(null, "/api/v1")             // 0
 	 * }</pre>
 	 *
-	 * @param prefixes the candidate path prefixes
-	 * @param requestPath the normalized request path
-	 * @return the best matched prefix length
+	 * @param prefixes 候选路径前缀
+	 * @param requestPath 归一化后的请求路径
+	 * @return 最佳匹配前缀的长度
 	 */
 	public static int bestPrefixMatchLength(Iterable<String> prefixes, String requestPath) {
 		if (prefixes == null || StringUtils.isBlank(requestPath)) {
@@ -117,7 +116,7 @@ public final class PathUtils {
 		for (String prefix : prefixes) {
 			String normalizedPrefix = StringUtils.stripEnd(normalizePath(prefix), "/");
 			if (StringUtils.isBlank(normalizedPrefix)) {
-				// prefix "/" is a root match-all; keep its legacy length-1 semantics
+				// 前缀 "/" 可匹配根路径下的全部请求；保留其长度为 1 的旧语义
 				if (requestPath.startsWith("/")) {
 					best = Math.max(best, 1);
 				}
@@ -135,14 +134,14 @@ public final class PathUtils {
 	}
 
 	/**
-	 * Returns the length of the longest prefix in {@code prefixes} that matches the start of
-	 * {@code requestPath}, or {@code 0} when none matches.
+	 * 返回 {@code prefixes} 中匹配 {@code requestPath} 开头的最长前缀的长度；
+	 * 若均不匹配则返回 {@code 0}。
 	 * <p>
-	 * Overload accepting a {@link List}.
+	 * 接受 {@link List} 参数的重载。
 	 *
-	 * @param prefixes the candidate path prefixes
-	 * @param requestPath the normalized request path
-	 * @return the best matched prefix length
+	 * @param prefixes 候选路径前缀
+	 * @param requestPath 归一化后的请求路径
+	 * @return 最佳匹配前缀的长度
 	 * @see #bestPrefixMatchLength(Iterable, String)
 	 */
 	public static int bestPrefixMatchLength(List<String> prefixes, String requestPath) {

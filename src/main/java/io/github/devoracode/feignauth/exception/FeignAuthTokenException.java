@@ -1,14 +1,13 @@
 package io.github.devoracode.feignauth.exception;
 
 /**
- * Thrown when an OAuth2 access token cannot be acquired or parsed at runtime.
+ * 运行时无法获取或解析 OAuth2 访问令牌时抛出。
  *
- * <p>Typical causes include a non-2xx response from the token endpoint, a
- * response body that cannot be parsed as JSON, a missing or blank token field
- * in the response, and network-level failures when calling the token endpoint.
+ * <p>典型原因包括：令牌端点返回非 2xx 响应、响应体无法解析为 JSON、
+ * 响应中的 token 字段缺失或为空、以及调用令牌端点时的网络层故障。
  *
- * <p>Unlike {@link FeignAuthConfigurationException}, this exception may occur
- * transiently and callers may choose to catch it for fallback handling.
+ * <p>与 {@link FeignAuthConfigurationException} 不同，此异常可能只是
+ * 暂时性的，调用方可以选择捕获它并进行降级处理。
  *
  * @author Wenjie Liu
  * @since 1.0.0

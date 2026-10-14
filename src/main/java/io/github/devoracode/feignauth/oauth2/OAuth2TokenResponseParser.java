@@ -15,7 +15,7 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * Parses OAuth2 token endpoint responses into {@link OAuth2AccessToken} instances.
+ * 将 OAuth2 令牌端点的响应解析为 {@link OAuth2AccessToken} 实例。
  *
  * @author Wenjie Liu
  * @since 1.0.0
@@ -37,14 +37,14 @@ public class OAuth2TokenResponseParser {
 	}
 
 	/**
-	 * Parses the HTTP response from a token endpoint.
-	 * @param statusCode the HTTP status code of the token response
-	 * @param body the raw response body
-	 * @param expireAheadSeconds seconds before expiry when the token should be refreshed
-	 * @param tokenField optional dot-separated JSON path for the access token
-	 * @param configuredExpiresInSeconds optional configured token TTL in seconds; when
-	 * positive, overrides response parsing
-	 * @return a populated access token
+	 * 解析令牌端点返回的 HTTP 响应。
+	 * @param statusCode 令牌响应的 HTTP 状态码
+	 * @param body 原始响应体
+	 * @param expireAheadSeconds 令牌到期前多少秒即应刷新
+	 * @param tokenField 访问令牌可选的点分隔 JSON 路径
+	 * @param configuredExpiresInSeconds 可选的配置令牌 TTL（秒）；为正数时覆盖
+	 *        对响应体的解析
+	 * @return 装配完成的访问令牌
 	 */
 	public OAuth2AccessToken parse(int statusCode, String body, long expireAheadSeconds, String tokenField,
 			Long configuredExpiresInSeconds) {
@@ -55,8 +55,8 @@ public class OAuth2TokenResponseParser {
 			JsonNode root = this.objectMapper.readTree(body == null ? "" : body);
 			String token = extractAccessToken(root, tokenField);
 			long expiresIn = resolveExpiresInSeconds(root, configuredExpiresInSeconds);
-			// Clamp so refreshIn is always >= 1: a 0-second TTL breaks Redis SETEX
-			// and makes the local cache expire instantly (token endpoint storm).
+			// 钳制取值使 refreshIn 始终 >= 1：0 秒 TTL 会破坏 Redis SETEX，
+			// 并导致本地缓存立即过期（引发令牌端点请求风暴）。
 			long expireAhead = Math.max(0L, Math.min(expireAheadSeconds, expiresIn - 1L));
 			long refreshIn = Math.max(1L, expiresIn - expireAhead);
 
@@ -140,7 +140,7 @@ public class OAuth2TokenResponseParser {
 				value = Long.parseLong(StringUtils.strip(node.asText()));
 			}
 			catch (NumberFormatException ignored) {
-				// continue
+				// 忽略，继续
 			}
 		}
 		if (value != null && value > 0) {

@@ -5,7 +5,7 @@ import lombok.Data;
 import java.io.Serializable;
 
 /**
- * Cached OAuth2 access token with an absolute expiry timestamp.
+ * 带绝对过期时间戳的已缓存 OAuth2 访问令牌。
  *
  * @author Wenjie Liu
  * @since 1.0.0

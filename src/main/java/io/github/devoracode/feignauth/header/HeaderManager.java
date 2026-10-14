@@ -13,25 +13,23 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Central coordinator for the three-stage header injection pipeline.
+ * 三阶段 header 注入管线的中心协调器。
  *
- * <p>Both the Feign business-request path and the OAuth2 token-request path share
- * this class to ensure consistent behavior and a single point of extension.
+ * <p>Feign 业务请求路径与 OAuth2 令牌请求路径共用此类，
+ * 以确保行为一致并提供单一扩展点。
  *
- * <h3>Pipeline stages</h3>
+ * <h3>管线阶段</h3>
  * <ol>
- *   <li><strong>Static</strong> — headers declared in the service configuration
- *       ({@code request-headers} or {@code token-request-headers}) are written first.
- *       Blank names and {@code null} values are silently skipped.</li>
- *   <li><strong>Dynamic ({@link HeaderCustomizer})</strong> — registered
- *       {@link HeaderCustomizer} beans whose {@link HeaderCustomizer#supports} returns
- *       {@code true} are invoked in list order. They may override static values when
- *       the same header name is reused.</li>
+ *   <li><strong>静态阶段</strong> — 首先写入服务配置中声明的 header
+ *       （{@code request-headers} 或 {@code token-request-headers}）。
+ *       空白名称与 {@code null} 值会被静默跳过。</li>
+ *   <li><strong>动态阶段（{@link HeaderCustomizer}）</strong> — 按列表顺序依次调用已注册且
+ *       {@link HeaderCustomizer#supports} 返回 {@code true} 的 {@link HeaderCustomizer} Bean。
+ *       当 header 名相同时，它们可以覆盖静态配置的值。</li>
  * </ol>
  *
- * <p>For business requests the final {@link HttpHeaders} are merged into the Feign
- * {@link RequestTemplate} by the caller. For token requests the {@link HttpHeaders}
- * object is passed directly to the HTTP entity.
+ * <p>对于业务请求，最终的 {@link HttpHeaders} 由调用方合并进 Feign 的
+ * {@link RequestTemplate}；对于令牌请求，{@link HttpHeaders} 对象会被直接传入 HTTP entity。
  *
  * @author Wenjie Liu
  * @since 1.14.0
@@ -50,20 +48,19 @@ public class HeaderManager {
 		this.customizers = (customizers != null) ? customizers : Collections.emptyList();
 	}
 
-	// ── Business request ─────────────────────────────────────────────────────
+	// ── 业务请求 ───────────────────────────────────────────────────────
 
 	/**
-	 * Builds the additional headers for a Feign business request and writes them into
-	 * the provided {@link RequestTemplate}.
+	 * 构建 Feign 业务请求的附加 header，并将其写入提供的 {@link RequestTemplate}。
 	 *
-	 * <p>Stage 1 reads the map from {@code FeignAuthProperties.Auth.getRequestHeaders()}.
-	 * Stage 2 calls {@link HeaderCustomizer#customize(RequestContext, HttpHeaders)}
-	 * on every matching customizer.
+	 * <p>阶段 1 读取 {@code FeignAuthProperties.Auth.getRequestHeaders()} 中的映射。
+	 * 阶段 2 对每个匹配的定制器调用
+	 * {@link HeaderCustomizer#customize(RequestContext, HttpHeaders)}。
 	 *
-	 * @param serviceName the logical service name
-	 * @param service the service configuration
-	 * @param requestPath the normalized request path
-	 * @param template the Feign request template to write headers into
+	 * @param serviceName 逻辑服务名
+	 * @param service 服务配置
+	 * @param requestPath 归一化后的请求路径
+	 * @param template 用于写入 header 的 Feign 请求模板
 	 */
 	public void applyRequestHeaders(String serviceName, FeignAuthProperties.Service service,
 			String requestPath, RequestTemplate template) {
@@ -71,10 +68,10 @@ public class HeaderManager {
 
 		HttpHeaders headers = new HttpHeaders();
 
-		// Stage 1: static headers from request-headers config
+		// 阶段 1：来自 request-headers 配置的静态 header
 		applyStaticHeaders(service.getAuth().getRequestHeaders(), headers);
 
-		// Stage 2: dynamic headers from HeaderCustomizer beans
+		// 阶段 2：来自 HeaderCustomizer Bean 的动态 header
 		if (!this.customizers.isEmpty()) {
 			RequestContext context = new RequestContext(serviceName, service, requestPath, template);
 			for (HeaderCustomizer customizer : this.customizers) {
@@ -83,7 +80,7 @@ public class HeaderManager {
 			}
 		}
 
-		// Merge into RequestTemplate; header() appends, so clear each name first (re-applied on Feign retry).
+		// 合并进 RequestTemplate；header() 是追加语义，因此先清除同名 header（Feign 重试时会再次执行本逻辑）。
 		headers.forEach((name, values) -> {
 			if (!values.isEmpty()) {
 				template.header(name);
@@ -92,30 +89,30 @@ public class HeaderManager {
 		});
 	}
 
-	// ── Token request ────────────────────────────────────────────────────────
+	// ── 令牌请求 ────────────────────────────────────────────────────────
 
 	/**
-	 * Builds the {@link HttpHeaders} for an OAuth2 token HTTP request.
+	 * 构建 OAuth2 令牌 HTTP 请求的 {@link HttpHeaders}。
 	 *
-	 * <p>Stage 1 reads the map from {@code FeignAuthProperties.Auth.getTokenRequestHeaders()}.
-	 * Stage 2 calls {@link HeaderCustomizer#customize(TokenRequestContext, HttpHeaders)}
-	 * on every matching customizer.
+	 * <p>阶段 1 读取 {@code FeignAuthProperties.Auth.getTokenRequestHeaders()} 中的映射。
+	 * 阶段 2 对每个匹配的定制器调用
+	 * {@link HeaderCustomizer#customize(TokenRequestContext, HttpHeaders)}。
 	 *
-	 * @param serviceName the logical service name
-	 * @param service the service configuration
-	 * @param client the OAuth2 client whose token is being requested
-	 * @param parameters the resolved token request parameters (field-name-mapped)
-	 * @return the populated {@link HttpHeaders} (does not include Content-Type;
-	 *         callers must set that themselves when needed)
+	 * @param serviceName 逻辑服务名
+	 * @param service 服务配置
+	 * @param client 正在为其申请令牌的 OAuth2 Client
+	 * @param parameters 解析后的令牌请求参数（按字段名映射）
+	 * @return 装配完成的 {@link HttpHeaders}（不包含 Content-Type；
+	 *         调用方需要自行设置）
 	 */
 	public HttpHeaders buildTokenHeaders(String serviceName, FeignAuthProperties.Service service,
 			FeignAuthProperties.Client client, Map<String, String> parameters) {
 		HttpHeaders headers = new HttpHeaders();
 
-		// Stage 1: static headers from token-request-headers config
+		// 阶段 1：来自 token-request-headers 配置的静态 header
 		applyStaticHeaders(service.getAuth().getTokenRequestHeaders(), headers);
 
-		// Stage 2: dynamic headers from HeaderCustomizer beans
+		// 阶段 2：来自 HeaderCustomizer Bean 的动态 header
 		if (!this.customizers.isEmpty()) {
 			TokenRequestContext context = new TokenRequestContext(serviceName, service, client, parameters);
 			for (HeaderCustomizer customizer : this.customizers) {
@@ -127,7 +124,7 @@ public class HeaderManager {
 		return headers;
 	}
 
-	// ── Internal helpers ─────────────────────────────────────────────────────
+	// ── 内部辅助方法 ─────────────────────────────────────────────────────
 
 	private static void applyStaticHeaders(Map<String, String> staticHeaders, HttpHeaders target) {
 		if (staticHeaders == null || staticHeaders.isEmpty()) {

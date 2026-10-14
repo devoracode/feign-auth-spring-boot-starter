@@ -3,7 +3,7 @@ package io.github.devoracode.feignauth.support;
 import org.apache.commons.lang3.StringUtils;
 
 /**
- * Supported authentication types for configured Feign services.
+ * 已配置的 Feign 服务所支持的认证类型。
  *
  * @author Wenjie Liu
  * @since 1.0.0
@@ -11,12 +11,12 @@ import org.apache.commons.lang3.StringUtils;
 public enum AuthType {
 
 	/**
-	 * OAuth2 token acquisition with optional client routing by path prefix.
+	 * OAuth2 令牌获取，支持按路径前缀进行可选的 Client 路由。
 	 */
 	OAUTH2("oauth2"),
 
 	/**
-	 * Static API key injected into a request header.
+	 * 注入请求 header 的静态 API key。
 	 */
 	API_KEY("api-key");
 
@@ -31,9 +31,9 @@ public enum AuthType {
 	}
 
 	/**
-	 * Parses the configured auth type string, ignoring case.
-	 * @param type the configured type value
-	 * @return the matching {@link AuthType}, or {@code null} when {@code type} is blank
+	 * 解析配置的认证类型字符串，忽略大小写。
+	 * @param type 配置的类型取值
+	 * @return 匹配的 {@link AuthType}；{@code type} 为空白时返回 {@code null}
 	 */
 	public static AuthType from(String type) {
 		if (StringUtils.isBlank(type)) {

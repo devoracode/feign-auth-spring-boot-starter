@@ -33,8 +33,8 @@ public class RedisTokenStore implements TokenStore {
         if (value instanceof OAuth2AccessToken) {
             return (OAuth2AccessToken) value;
         }
-        // A foreign value (e.g. serializer mismatch) would silently re-fetch every
-        // request; drop it once so the next put overwrites with the right type.
+        // 外部写入的异常值（例如序列化器不匹配）会导致每次请求都静默重新拉取
+        // 令牌；此处删除一次，使下一次 put 以正确类型覆盖。
         logger.warn("FeignAuth [redis-store] unexpected value type " + value.getClass().getName()
                 + " for key '" + fullKey + "', removing it");
         redisTemplate.delete(fullKey);
@@ -43,7 +43,7 @@ public class RedisTokenStore implements TokenStore {
 
     @Override
     public void put(String key, OAuth2AccessToken token) {
-        // SETEX rejects ttl <= 0, so fall back to the shortest valid expiry
+        // SETEX 拒绝 ttl <= 0，因此回退到最短的合法过期时间
         long ttl = Math.max(1L, token.getTtl());
         redisTemplate.opsForValue().set(keyPrefix + TOKEN_SUFFIX + key, token, ttl, TimeUnit.SECONDS);
     }

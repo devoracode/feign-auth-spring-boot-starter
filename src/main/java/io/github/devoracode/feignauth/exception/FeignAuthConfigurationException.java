@@ -1,13 +1,11 @@
 package io.github.devoracode.feignauth.exception;
 
 /**
- * Thrown when the feign-auth configuration is missing or invalid.
+ * feign-auth 配置缺失或非法时抛出。
  *
- * <p>Typical causes include missing {@code token-url}, absent OAuth2 client
- * credentials, ambiguous service or client definitions, and unsupported
- * authentication method values. These problems are normally detected on the
- * first request and indicate a configuration error that must be corrected
- * before the application can operate correctly.
+ * <p>典型原因包括：缺少 {@code token-url}、OAuth2 客户端凭证缺失、
+ * 服务或客户端定义存在歧义、以及不支持的认证方式取值。这些问题通常在
+ * 首次请求时被检测到，须在修正该配置错误后应用才能正常运行。
  *
  * @author Wenjie Liu
  * @since 1.0.0

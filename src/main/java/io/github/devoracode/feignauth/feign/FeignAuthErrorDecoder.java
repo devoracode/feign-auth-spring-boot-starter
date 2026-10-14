@@ -7,7 +7,7 @@ import io.github.devoracode.feignauth.oauth2.TokenFetcher;
 import org.springframework.util.Assert;
 
 /**
- * Feign {@link ErrorDecoder} that evicts expired OAuth2 tokens and classifies common remote errors.
+ * 淘汰过期 OAuth2 令牌并对常见远程错误进行分类的 Feign {@link ErrorDecoder}。
  *
  * @author Wenjie Liu
  * @since 1.4.0

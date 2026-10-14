@@ -13,7 +13,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class FeignClientConfigTest {
 
-	// ── service-matcher routing ──────────────────────────────────────────────
+	// ── service-matcher 路由 ──────────────────────────────────────────────
 
 	@Test
 	void matchesLongestPathPrefixBeforeFallbackForSameBaseUrl() {
@@ -58,7 +58,7 @@ class FeignClientConfigTest {
 				.hasMessageContaining("Multiple services matched");
 	}
 
-	// ── helpers ──────────────────────────────────────────────────────────────
+	// ── 辅助方法 ──────────────────────────────────────────────────────────
 
 	private static FeignAuthRequestInterceptor interceptor(FeignAuthProperties properties) {
 		return new FeignAuthRequestInterceptor(new ServiceMatcher(properties), null, new HeaderManager(),

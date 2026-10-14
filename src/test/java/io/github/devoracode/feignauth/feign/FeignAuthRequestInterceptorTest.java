@@ -15,8 +15,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /**
- * Tests for {@link FeignAuthRequestInterceptor}, focusing on header injection idempotency
- * when Feign re-applies interceptors on the same template during a retry.
+ * {@link FeignAuthRequestInterceptor} 的测试，重点验证 Feign 在重试过程中对同一模板重复应用拦截器时 header 注入的幂等性。
  */
 class FeignAuthRequestInterceptorTest {
 
@@ -32,7 +31,7 @@ class FeignAuthRequestInterceptorTest {
 		FeignAuthRequestInterceptor interceptor = interceptorWith(service, null);
 
 		interceptor.apply(template);
-		// simulate a token rotation before the retry re-applies the interceptor
+		// 模拟重试重新应用拦截器之前发生了 token 轮换
 		service.getAuth().setValue("sk-refreshed");
 		interceptor.apply(template);
 

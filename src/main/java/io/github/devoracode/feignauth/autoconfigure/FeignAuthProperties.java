@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Configuration properties for feign-auth-spring-boot-starter.
+ * feign-auth-spring-boot-starter 的配置属性。
  *
  * @author Wenjie Liu
  * @since 1.0.0
@@ -58,7 +58,7 @@ public class FeignAuthProperties {
     }
 
     /**
-     * Configuration for a single third-party service.
+     * 单个第三方服务的配置。
      */
     @Getter
     @Setter
@@ -71,7 +71,7 @@ public class FeignAuthProperties {
     }
 
     /**
-     * Authentication configuration for a service.
+     * 服务的鉴权配置。
      */
     @Getter
     @Setter
@@ -151,7 +151,7 @@ public class FeignAuthProperties {
     }
 
     /**
-     * Custom field names for the OAuth2 token request payload.
+     * OAuth2 令牌请求载荷的自定义字段名。
      */
     @Getter
     @Setter
@@ -166,7 +166,7 @@ public class FeignAuthProperties {
     }
 
     /**
-     * OAuth2 client credential configuration.
+     * OAuth2 客户端凭证配置。
      */
     @Getter
     @Setter

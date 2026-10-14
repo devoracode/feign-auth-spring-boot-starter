@@ -5,7 +5,7 @@ import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
 /**
- * A service configuration resolved for an outgoing Feign request.
+ * 为发出的 Feign 请求解析得到的服务配置。
  *
  * @author Wenjie Liu
  * @since 1.0.0

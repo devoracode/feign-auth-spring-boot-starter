@@ -17,11 +17,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Tests for {@link HeaderManager} covering both business-request and token-request paths.
+ * {@link HeaderManager} 的测试，覆盖业务请求与 token 请求两条路径。
  */
 class HeaderManagerTest {
 
-	// ── applyRequestHeaders — static ─────────────────────────────────────────
+	// ── applyRequestHeaders：静态 header ─────────────────────────────────────
 
 	@Test
 	void staticRequestHeadersAreWrittenIntoTemplate() {
@@ -63,7 +63,7 @@ class HeaderManagerTest {
 		assertThat(firstValue(template, "X-Present")).isEqualTo("here");
 	}
 
-	// ── applyRequestHeaders — dynamic (HeaderCustomizer) ─────────────────────
+	// ── applyRequestHeaders：动态（HeaderCustomizer）─────────────────────────
 
 	@Test
 	void customizerCalledForRequestWhenSupportsTrue() {
@@ -128,7 +128,7 @@ class HeaderManagerTest {
 		FeignAuthProperties.Service service = serviceWithRequestHeaders(headers("X-App-Id", "my-app"));
 		RequestTemplate template = template("https://api.example.com", "/api/data");
 
-		// Feign re-applies interceptors on the same RequestTemplate when retrying
+		// Feign 重试时会在同一个 RequestTemplate 上重复应用拦截器
 		HeaderManager manager = new HeaderManager();
 		manager.applyRequestHeaders("svc", service, "/api/data", template);
 		manager.applyRequestHeaders("svc", service, "/api/data", template);
@@ -193,7 +193,7 @@ class HeaderManagerTest {
 				.isInstanceOf(RuntimeException.class).hasMessage("boom");
 	}
 
-	// ── buildTokenHeaders — static ────────────────────────────────────────────
+	// ── buildTokenHeaders：静态 header ───────────────────────────────────────
 
 	@Test
 	void staticTokenRequestHeadersAreReturned() {
@@ -221,7 +221,7 @@ class HeaderManagerTest {
 		assertThat(result.getFirst("X-Valid")).isEqualTo("ok");
 	}
 
-	// ── buildTokenHeaders — dynamic (HeaderCustomizer) ────────────────────────
+	// ── buildTokenHeaders：动态（HeaderCustomizer）───────────────────────────
 
 	@Test
 	void customizerCalledForTokenWhenSupportsTrue() {
@@ -313,7 +313,7 @@ class HeaderManagerTest {
 				.isInstanceOf(RuntimeException.class).hasMessage("token-boom");
 	}
 
-	// ── helpers ───────────────────────────────────────────────────────────────
+	// ── 辅助方法 ──────────────────────────────────────────────────────────────
 
 	private static FeignAuthProperties.Service serviceWithRequestHeaders(Map<String, String> requestHeaders) {
 		FeignAuthProperties.Service service = new FeignAuthProperties.Service();
@@ -364,9 +364,9 @@ class HeaderManagerTest {
 		return (values != null && !values.isEmpty()) ? values.iterator().next() : null;
 	}
 
-	// ── stubs ─────────────────────────────────────────────────────────────────
+	// ── 测试桩 ────────────────────────────────────────────────────────────────
 
-	/** Matches only the given serviceName; writes a fixed header in each customize method. */
+	/** 仅匹配给定的 serviceName；在每个 customize 方法中写入固定 header。 */
 	private static final class TrackingCustomizer implements HeaderCustomizer {
 		private final String target;
 		int requestCallCount;
@@ -390,7 +390,7 @@ class HeaderManagerTest {
 		}
 	}
 
-	/** Captures the context objects passed to each customize method. */
+	/** 捕获传递给每个 customize 方法的上下文对象。 */
 	private static final class ContextCapturingCustomizer implements HeaderCustomizer {
 		RequestContext capturedRequestContext;
 		TokenRequestContext capturedTokenContext;

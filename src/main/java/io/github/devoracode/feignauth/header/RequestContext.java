@@ -10,7 +10,7 @@ import java.util.Collections;
 import java.util.Map;
 
 /**
- * Immutable context object passed to {@link HeaderCustomizer} for Feign business requests.
+ * Feign 业务请求场景下传给 {@link HeaderCustomizer} 的不可变上下文对象。
  *
  * @author Wenjie Liu
  * @since 1.14.0

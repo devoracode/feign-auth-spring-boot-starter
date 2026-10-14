@@ -16,8 +16,8 @@ import org.springframework.util.Assert;
 import java.net.URI;
 
 /**
- * Feign {@link RequestInterceptor} that injects authentication headers and additional
- * custom headers into every outgoing Feign business request.
+ * 向每个发出的 Feign 业务请求注入认证 header 及额外自定义 header 的
+ * Feign {@link RequestInterceptor}。
  *
  * @author Wenjie Liu
  * @since 1.0.0
@@ -106,11 +106,11 @@ public class FeignAuthRequestInterceptor implements RequestInterceptor {
     }
 
     /**
-     * Resolves which configured service should handle the given request.
+     * 解析应当处理给定请求的配置服务。
      *
-     * @param baseUrl     the base URL of the Feign target
-     * @param requestPath the normalized request path
-     * @return the resolved service, or {@code null} when no service matches
+     * @param baseUrl     Feign target 的基础 URL
+     * @param requestPath 归一化后的请求路径
+     * @return 解析得到的服务；若无匹配服务则返回 {@code null}
      */
     public ResolvedService matchService(String baseUrl, String requestPath) {
         return this.serviceMatcher.match(baseUrl, requestPath);
@@ -159,7 +159,7 @@ public class FeignAuthRequestInterceptor implements RequestInterceptor {
         return StringUtils.defaultString(prefix);
     }
 
-    // header() appends and Feign re-runs interceptors on the same template when retrying, so clear the name first.
+    // header() 是追加语义，且 Feign 重试时会在同一个 template 上重新执行拦截器，因此先清除同名 header。
     private static void setHeader(RequestTemplate template, String name, String value) {
         template.header(name);
         template.header(name, value);

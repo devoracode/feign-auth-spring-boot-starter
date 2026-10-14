@@ -33,7 +33,7 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * Auto-configuration for feign-auth-spring-boot-starter.
+ * feign-auth-spring-boot-starter 的自动配置。
  *
  * @author Wenjie Liu
  * @since 1.0.0

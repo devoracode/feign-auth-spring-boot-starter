@@ -6,7 +6,7 @@ import io.github.devoracode.feignauth.support.PathUtils;
 import org.springframework.util.Assert;
 
 /**
- * Resolves OAuth2 client credentials for a service request path.
+ * 为服务请求路径解析匹配的 OAuth2 客户端凭证。
  *
  * @author Wenjie Liu
  * @since 1.0.0
@@ -14,11 +14,11 @@ import org.springframework.util.Assert;
 public class OAuth2ClientMatcher {
 
 	/**
-	 * Selects the OAuth2 client that best matches the given request path.
-	 * @param serviceName the logical service name
-	 * @param service the service configuration
-	 * @param requestPath the normalized request path
-	 * @return the selected client
+	 * 选择与给定请求路径最匹配的 OAuth2 Client。
+	 * @param serviceName 逻辑服务名
+	 * @param service 服务配置
+	 * @param requestPath 归一化后的请求路径
+	 * @return 选中的 Client
 	 */
 	public FeignAuthProperties.Client match(String serviceName, FeignAuthProperties.Service service,
 			String requestPath) {
