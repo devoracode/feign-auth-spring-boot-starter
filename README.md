@@ -398,7 +398,7 @@ public class SignatureCustomizer implements HeaderCustomizer { ... }
 
 starter 默认注册一个 Feign `Retryer`（最多 2 次尝试，退避 100ms ~ 1s），以下两种情况会**重放整个请求**：
 
-1. **Token 过期**：收到 401 / 421 / 423（或 `expired-token-statuses` 配置的状态码）时，starter 驱逐缓存 token 并抛出 `RetryableException`，Feign 携带新 token 重发一次。
+1. **Token 过期**：收到 401 / 421 / 423（或 `expired-token-statuses` 配置的状态码）时，starter 驱逐缓存 token 并抛出 `RetryableException`，Feign 携带新 token 重发一次。同一 `{service}:{client}` 的驱逐有 **30 秒冷却**（硬编码）：若远端对新 token 仍然拒绝，冷却期内的请求不再驱逐、不再重放，而是直接抛出不可重试的 `FeignAuthTokenException`，避免持续 401 把令牌刷新压力放大到 IdP。
 2. **网络类错误**：连接/读取超时等 I/O 异常同样会被默认 Retryer 重试。
 
 重放带来的两个约束需要使用方知晓：

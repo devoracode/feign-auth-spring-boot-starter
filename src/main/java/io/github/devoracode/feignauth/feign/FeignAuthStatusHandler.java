@@ -50,7 +50,8 @@ final class FeignAuthStatusHandler {
 	/**
 	 * 处理 HTTP 错误响应。
 	 * <p>当状态码为 421 或 423 且服务使用 OAuth2 时，会淘汰缓存的 token 并返回
-	 * {@link RetryableException} 以触发重试。对于其他 4xx/5xx 状态码，返回带有
+	 * {@link RetryableException} 以触发重试；若该令牌的淘汰正处于冷却期，则返回
+	 * 不可重试的原始错误。对于其他 4xx/5xx 状态码，返回带有
 	 * 描述信息的 {@link FeignAuthTokenException}。
 	 * @param methodKey Feign 方法键（用于构造 cause 异常）
 	 * @param response Feign 响应
@@ -85,7 +86,7 @@ final class FeignAuthStatusHandler {
 		// 检查 token 是否过期（HTTP 状态码或响应体状态）
 		Integer detectedStatus = detectExpiredTokenStatus(resolved, status, bodyBytes);
 		if (detectedStatus != null && isOAuth2Service(resolved)) {
-			return handleExpiredToken(response, resolved, request, detectedStatus);
+			return handleExpiredToken(methodKey, response, resolved, request, detectedStatus);
 		}
 
 		if (status < 400) {
@@ -203,12 +204,21 @@ final class FeignAuthStatusHandler {
 		return null;
 	}
 
-	private Exception handleExpiredToken(Response response, ResolvedService resolved, ResolvedRequest request,
-			Integer detectedStatus) {
+	private Exception handleExpiredToken(String methodKey, Response response, ResolvedService resolved,
+			ResolvedRequest request, Integer detectedStatus) {
 
 		boolean evicted = this.tokenFetcher.invalidateToken(resolved.getServiceName(), request.getRequestPath());
+		if (!evicted) {
+			// 冷却期内不再清缓存重试：持续 401 说明新令牌同样被拒，重试只会放大请求量
+			String message = "FeignAuth: service '" + resolved.getServiceName() + "' returned " + detectedStatus
+					+ ", OAuth2 token eviction skipped (cooldown or cache empty), request not retried";
+			if (logger.isWarnEnabled()) {
+				logger.warn(message);
+			}
+			return new FeignAuthTokenException(message, FeignException.errorStatus(methodKey, response));
+		}
 		String message = "FeignAuth: service '" + resolved.getServiceName() + "' returned " + detectedStatus
-				+ ", OAuth2 token cache evicted=" + evicted + ", retrying request";
+				+ ", OAuth2 token cache evicted, retrying request";
 		if (logger.isWarnEnabled()) {
 			logger.warn(message);
 		}

@@ -6,17 +6,20 @@ import feign.RequestTemplate;
 import feign.Response;
 import feign.RetryableException;
 import io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties;
+import io.github.devoracode.feignauth.exception.FeignAuthTokenException;
 import io.github.devoracode.feignauth.header.HeaderManager;
 import io.github.devoracode.feignauth.oauth2.*;
 import io.github.devoracode.feignauth.oauth2.lock.LocalLockProvider;
 import io.github.devoracode.feignauth.oauth2.store.LocalTokenStore;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -66,6 +69,63 @@ class FeignAuthErrorDecoderTest {
 		assertThat(exception).isInstanceOf(RetryableException.class);
 		assertThat(tokenFetcher.getToken("measure", "/api/measure/read/1")).isEqualTo("token-2");
 		assertThat(tokenRequestClient.getRequestCount()).isEqualTo(2);
+	}
+
+	@Test
+	void repeatedExpiredTokenWithinCooldownPropagatesOriginalErrorWithoutRetry() throws Exception {
+		FeignAuthProperties properties = new FeignAuthProperties();
+		properties.setServices(new LinkedHashMap<>());
+		properties.getServices().put("measure", oauth2Service("https://api.service-a.com",
+				client("telemetry", "/api/measure"), client("default")));
+
+		CountingTokenRequestClient tokenRequestClient = new CountingTokenRequestClient();
+		TokenFetcher tokenFetcher = new TokenFetcher(properties, new OAuth2ClientMatcher(), tokenRequestClient,
+				new LocalTokenStore(), new LocalLockProvider());
+		FeignAuthErrorDecoder decoder = new FeignAuthErrorDecoder(new ServiceMatcher(properties), tokenFetcher, objectMapper);
+
+		assertThat(tokenFetcher.getToken("measure", "/api/measure/read/1")).isEqualTo("token-1");
+		// 首次 401：清缓存并重试
+		assertThat(decoder.decode("MeasureClient#getReading",
+				response(401, "https://api.service-a.com/api/measure/read/1"))).isInstanceOf(RetryableException.class);
+		// 重试路径拉取新 token 并缓存
+		assertThat(tokenFetcher.getToken("measure", "/api/measure/read/1")).isEqualTo("token-2");
+
+		// 冷却期内再次 401：淘汰被抑制，传播原始错误且不触发重试
+		Exception second = decoder.decode("MeasureClient#getReading",
+				response(401, "https://api.service-a.com/api/measure/read/1"));
+		assertThat(second).isInstanceOf(FeignAuthTokenException.class);
+		assertThat(second instanceof RetryableException).isFalse();
+		// token-2 仍在缓存，未再拉取新令牌
+		assertThat(tokenFetcher.getToken("measure", "/api/measure/read/1")).isEqualTo("token-2");
+		assertThat(tokenRequestClient.getRequestCount()).isEqualTo(2);
+	}
+
+	@Test
+	void evictionAllowedAgainAfterCooldownWindowElapsed() throws Exception {
+		FeignAuthProperties properties = new FeignAuthProperties();
+		properties.setServices(new LinkedHashMap<>());
+		properties.getServices().put("measure", oauth2Service("https://api.service-a.com",
+				client("telemetry", "/api/measure"), client("default")));
+
+		CountingTokenRequestClient tokenRequestClient = new CountingTokenRequestClient();
+		TokenFetcher tokenFetcher = new TokenFetcher(properties, new OAuth2ClientMatcher(), tokenRequestClient,
+				new LocalTokenStore(), new LocalLockProvider());
+		FeignAuthErrorDecoder decoder = new FeignAuthErrorDecoder(new ServiceMatcher(properties), tokenFetcher, objectMapper);
+
+		assertThat(tokenFetcher.getToken("measure", "/api/measure/read/1")).isEqualTo("token-1");
+		seedLastEvictionMillis(tokenFetcher, "measure:telemetry", System.currentTimeMillis() - 60_000L);
+
+		assertThat(decoder.decode("MeasureClient#getReading",
+				response(401, "https://api.service-a.com/api/measure/read/1"))).isInstanceOf(RetryableException.class);
+		assertThat(tokenFetcher.getToken("measure", "/api/measure/read/1")).isEqualTo("token-2");
+		assertThat(tokenRequestClient.getRequestCount()).isEqualTo(2);
+	}
+
+	@SuppressWarnings("unchecked")
+	private static void seedLastEvictionMillis(TokenFetcher fetcher, String cacheKey, long millis) throws Exception {
+		Field field = TokenFetcher.class.getDeclaredField("lastEvictionMillis");
+		field.setAccessible(true);
+		((Map<String, Long>) field.get(fetcher)).put(cacheKey, millis);
 	}
 
 	private static Response response(int status, String url) {

@@ -11,6 +11,8 @@ import org.springframework.util.Assert;
 
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 /**
  * 为已配置的 Feign 服务提供带缓存的 OAuth2 访问令牌。
@@ -22,6 +24,10 @@ public class TokenFetcher {
 
 	private static final Log logger = LogFactory.getLog(TokenFetcher.class);
 
+	// 持续 401 场景下，每次都清缓存重试会形成 401->刷新->401 风暴并轰击 IdP，
+	// 故对同一缓存键的淘汰做硬编码冷却
+	private static final long EVICT_COOLDOWN_MILLIS = TimeUnit.SECONDS.toMillis(30);
+
 	private final FeignAuthProperties properties;
 
 	private final OAuth2ClientMatcher clientMatcher;
@@ -31,6 +37,9 @@ public class TokenFetcher {
 	private final TokenStore tokenStore;
 
 	private final LockProvider lockProvider;
+
+	/** 各缓存键最近一次淘汰令牌的时间戳（毫秒），用于冷却判定 */
+	private final Map<String, Long> lastEvictionMillis = new ConcurrentHashMap<>();
 
 	public TokenFetcher(FeignAuthProperties properties, OAuth2ClientMatcher clientMatcher,
 			OAuth2TokenRequestClient tokenRequestClient, TokenStore tokenStore,
@@ -66,9 +75,11 @@ public class TokenFetcher {
 
 	/**
 	 * 使按给定请求路径选定的已缓存 OAuth2 访问令牌失效。
+	 * <p>同一缓存键在 30 秒冷却期内重复调用会被抑制，以防止持续 401
+	 * 场景下反复清缓存、刷新令牌并轰击 IdP。
 	 * @param serviceName 逻辑服务名
 	 * @param requestPath 归一化后的请求路径
-	 * @return 当缓存令牌被移除时返回 {@code true}
+	 * @return 当缓存令牌被移除时返回 {@code true}；处于冷却期或未命中缓存时返回 {@code false}
 	 */
 	public boolean invalidateToken(String serviceName, String requestPath) {
 		FeignAuthProperties.Service service = getRequiredService(serviceName);
@@ -79,6 +90,16 @@ public class TokenFetcher {
 
 		FeignAuthProperties.Client client = resolveClient(serviceName, service, requestPath);
 		String cacheKey = buildCacheKey(serviceName, client);
+		long now = System.currentTimeMillis();
+		Long lastEviction = this.lastEvictionMillis.get(cacheKey);
+		if (lastEviction != null && now - lastEviction < EVICT_COOLDOWN_MILLIS) {
+			if (logger.isWarnEnabled()) {
+				logger.warn("FeignAuth [oauth2] token eviction suppressed within cooldown for service='"
+						+ serviceName + "', clientId='" + client.getId() + "'");
+			}
+			return false;
+		}
+		this.lastEvictionMillis.put(cacheKey, now);
 		boolean removed = this.tokenStore.remove(cacheKey);
 		if (removed && logger.isInfoEnabled()) {
 			logger.info("FeignAuth [oauth2] token evicted for service='" + serviceName + "', clientId='"
