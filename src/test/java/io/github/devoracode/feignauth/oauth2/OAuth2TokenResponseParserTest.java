@@ -1,9 +1,12 @@
 package io.github.devoracode.feignauth.oauth2;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.github.devoracode.feignauth.exception.FeignAuthTokenException;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowableOfType;
 
 class OAuth2TokenResponseParserTest {
 
@@ -114,6 +117,50 @@ class OAuth2TokenResponseParserTest {
 		OAuth2AccessToken accessToken = this.parser.parse(200, body, 0L, null, null);
 
 		assertThat(accessToken.getTtl()).isEqualTo(86400L);
+	}
+
+	@Test
+	void non2xxReportsErrorAndErrorDescriptionFromJsonBody() {
+		String body = "{\"error\":\"invalid_client\",\"error_description\":\"client_secret is expired\"}";
+
+		assertThatThrownBy(() -> this.parser.parse(401, body, 60L, null, null))
+				.isInstanceOf(FeignAuthTokenException.class)
+				.hasMessageContaining("401")
+				.hasMessageContaining("invalid_client")
+				.hasMessageContaining("client_secret is expired");
+	}
+
+	@Test
+	void non2xxReportsRawBodyWhenNotJson() {
+		String body = "<html>gateway blew up</html>";
+
+		assertThatThrownBy(() -> this.parser.parse(502, body, 60L, null, null))
+				.isInstanceOf(FeignAuthTokenException.class)
+				.hasMessageContaining("502")
+				.hasMessageContaining("gateway blew up");
+	}
+
+	@Test
+	void non2xxTruncatesOversizedBody() {
+		StringBuilder builder = new StringBuilder("{\"error\":\"server_error\",\"error_description\":\"");
+		for (int i = 0; i < 4000; i++) {
+			builder.append('x');
+		}
+		builder.append("\"}");
+
+		FeignAuthTokenException thrown = catchThrowableOfType(
+				() -> this.parser.parse(500, builder.toString(), 60L, null, null), FeignAuthTokenException.class);
+
+		assertThat(thrown).isNotNull();
+		assertThat(thrown.getMessage()).contains("server_error");
+		assertThat(thrown.getMessage().length()).isLessThan(2048);
+	}
+
+	@Test
+	void non2xxWithoutBodyStillReportsStatus() {
+		assertThatThrownBy(() -> this.parser.parse(403, null, 60L, null, null))
+				.isInstanceOf(FeignAuthTokenException.class)
+				.hasMessageContaining("403");
 	}
 
 }

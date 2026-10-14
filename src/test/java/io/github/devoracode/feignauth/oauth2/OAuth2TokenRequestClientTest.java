@@ -139,6 +139,21 @@ class OAuth2TokenRequestClientTest {
 	}
 
 	@Test
+	void non2xxResponseBodyReachesExceptionFromClientSide() {
+		this.server.createContext("/token",
+				exchange -> respond(exchange, 400,
+						"{\"error\":\"unauthorized_client\",\"error_description\":\"grant_type not allowed\"}"));
+
+		OAuth2TokenRequestClient client = createClient(new FeignAuthProperties.Http());
+
+		assertThatThrownBy(() -> client.requestToken("svc", service(this.tokenUrl), clientCredentials()))
+				.isInstanceOf(FeignAuthTokenException.class)
+				.hasMessageContaining("400")
+				.hasMessageContaining("unauthorized_client")
+				.hasMessageContaining("grant_type not allowed");
+	}
+
+	@Test
 	void injectedObjectMapperIsUsedForRequestBody() {
 		AtomicReference<String> receivedBody = new AtomicReference<>();
 		this.server.createContext("/token", exchange -> {

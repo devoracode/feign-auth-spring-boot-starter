@@ -29,6 +29,9 @@ public class OAuth2TokenResponseParser {
 
 	private static final int MAX_EXPIRES_IN_SEARCH_DEPTH = 3;
 
+	// 异常信息中保留的响应体上限：足够定位 IdP 错误，又不会把整页 HTML 塞进日志
+	private static final int MAX_ERROR_BODY_CHARS = 512;
+
 	private static final List<String> EXPIRES_IN_FIELD_NAMES = Arrays.asList("expires_in", "expiresIn", "expire_in",
 			"expireIn");
 
@@ -52,7 +55,7 @@ public class OAuth2TokenResponseParser {
 	public OAuth2AccessToken parse(int statusCode, String body, long expireAheadSeconds, String tokenField,
 			Long configuredExpiresInSeconds) {
 		if (statusCode < 200 || statusCode >= 300) {
-			throw new FeignAuthTokenException("Token request failed: " + statusCode);
+			throw new FeignAuthTokenException(describeFailure(statusCode, body));
 		}
 		try {
 			JsonNode root = this.objectMapper.readTree(body == null ? "" : body);
@@ -78,6 +81,47 @@ public class OAuth2TokenResponseParser {
 		catch (Exception ex) {
 			throw new FeignAuthTokenException("Parse token response failed: " + ex.getMessage(), ex);
 		}
+	}
+
+	// 非 2xx 时 IdP 通常返回 {"error":..,"error_description":..}，只报状态码会让排障无从下手
+	private String describeFailure(int statusCode, String body) {
+		StringBuilder message = new StringBuilder("Token request failed: ").append(statusCode);
+		if (StringUtils.isBlank(body)) {
+			return message.toString();
+		}
+		try {
+			JsonNode root = this.objectMapper.readTree(body);
+			String error = textValue(root.get("error"));
+			String description = textValue(root.get("error_description"));
+			if (error != null || description != null) {
+				if (error != null) {
+					message.append(", error=").append(truncate(error));
+				}
+				if (description != null) {
+					message.append(", error_description=").append(truncate(description));
+				}
+				return message.toString();
+			}
+		}
+		catch (Exception ignored) {
+			// 响应体不是 JSON，走下方原文截断
+		}
+		return message.append(", body=").append(truncate(body)).toString();
+	}
+
+	private static String textValue(JsonNode node) {
+		if (node == null || !node.isValueNode()) {
+			return null;
+		}
+		String value = node.asText();
+		return StringUtils.isNotBlank(value) ? value : null;
+	}
+
+	private static String truncate(String value) {
+		if (value.length() <= MAX_ERROR_BODY_CHARS) {
+			return value;
+		}
+		return value.substring(0, MAX_ERROR_BODY_CHARS) + "...(truncated)";
 	}
 
 	private static long resolveExpiresInSeconds(JsonNode root, Long configuredExpiresInSeconds) {
