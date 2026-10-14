@@ -164,6 +164,12 @@
       "defaultValue": "feign-auth:"
     },
     {
+      "name": "feign.auth.fail-on-no-match",
+      "type": "java.lang.Boolean",
+      "description": "When true (default), a request whose URL/path matches no configured service fails fast with FeignAuthConfigurationException. When false, a WARN is logged and the request is sent without auth headers. Services matched by base URL but carrying invalid auth config always fail fast regardless of this flag.",
+      "defaultValue": true
+    },
+    {
       "name": "feign.auth.http.connect-timeout",
       "type": "java.time.Duration",
       "description": "Connect timeout for the built-in Apache HttpClient used for OAuth2 token requests.",

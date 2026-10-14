@@ -1,6 +1,9 @@
 package io.github.devoracode.feignauth.oauth2;
 
-import lombok.Data;
+import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.Setter;
+import lombok.ToString;
 
 import java.io.Serializable;
 
@@ -10,7 +13,11 @@ import java.io.Serializable;
  * @author Wenjie Liu
  * @since 1.0.0
  */
-@Data
+@Getter
+@Setter
+@EqualsAndHashCode
+// 令牌值不得进入 toString，防止日志/异常拼接泄露
+@ToString(exclude = "accessToken")
 public class OAuth2AccessToken implements Serializable {
 
 	private static final long serialVersionUID = 1L;

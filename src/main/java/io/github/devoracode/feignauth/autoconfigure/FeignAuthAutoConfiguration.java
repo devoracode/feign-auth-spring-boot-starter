@@ -115,7 +115,7 @@ public class FeignAuthAutoConfiguration {
                                                           FeignAuthProperties properties) {
             // 注册为容器 Bean：close() 会被推断为 destroyMethod，上下文关闭时释放连接池
             return new OAuth2TokenRequestClient(new OAuth2TokenResponseParser(objectMapper), headerManager,
-                properties.getAuth().getHttp());
+                objectMapper, properties.getAuth().getHttp());
         }
 
         @Bean

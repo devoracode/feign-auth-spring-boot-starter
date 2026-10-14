@@ -33,7 +33,7 @@ class FeignAuthAutoConfigurationTest {
 	@Test
 	void userDefinedTokenRequestClientReplacesDefault() throws Exception {
 		OAuth2TokenRequestClient custom = new OAuth2TokenRequestClient(
-				new OAuth2TokenResponseParser(new ObjectMapper()), new HeaderManager(),
+				new OAuth2TokenResponseParser(new ObjectMapper()), new HeaderManager(), new ObjectMapper(),
 				new FeignAuthProperties.Http());
 		try {
 			this.runner.withBean(OAuth2TokenRequestClient.class, () -> custom).run(context -> {

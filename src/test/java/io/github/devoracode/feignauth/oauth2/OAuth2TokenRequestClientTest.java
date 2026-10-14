@@ -138,9 +138,27 @@ class OAuth2TokenRequestClientTest {
 		assertThat(token.getAccessToken()).isEqualTo("令牌-α");
 	}
 
+	@Test
+	void injectedObjectMapperIsUsedForRequestBody() {
+		AtomicReference<String> receivedBody = new AtomicReference<>();
+		this.server.createContext("/token", exchange -> {
+			receivedBody.set(readRequestBody(exchange));
+			respond(exchange, 200, "{\"access_token\":\"t\",\"expires_in\":600}");
+		});
+
+		ObjectMapper wrappingMapper = new ObjectMapper();
+		wrappingMapper.enable(com.fasterxml.jackson.databind.SerializationFeature.WRAP_ROOT_VALUE);
+		OAuth2TokenRequestClient client = new OAuth2TokenRequestClient(
+				new OAuth2TokenResponseParser(new ObjectMapper()), new HeaderManager(), wrappingMapper,
+				new FeignAuthProperties.Http());
+
+		client.requestToken("svc", service(this.tokenUrl), clientCredentials());
+		assertThat(receivedBody.get()).startsWith("{\"HashMap\":");
+	}
+
 	private OAuth2TokenRequestClient createClient(FeignAuthProperties.Http http) {
 		OAuth2TokenResponseParser parser = new OAuth2TokenResponseParser(new ObjectMapper());
-		return new OAuth2TokenRequestClient(parser, new HeaderManager(), http);
+		return new OAuth2TokenRequestClient(parser, new HeaderManager(), new ObjectMapper(), http);
 	}
 
 	private static FeignAuthProperties.Service service(String tokenUrl) {

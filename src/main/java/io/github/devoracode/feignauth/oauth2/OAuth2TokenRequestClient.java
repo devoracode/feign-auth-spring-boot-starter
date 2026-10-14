@@ -52,16 +52,18 @@ public class OAuth2TokenRequestClient implements AutoCloseable {
 
 	private final HeaderManager headerManager;
 
-	private final ObjectMapper objectMapper = new ObjectMapper();
+	private final ObjectMapper objectMapper;
 
 	public OAuth2TokenRequestClient(OAuth2TokenResponseParser responseParser, HeaderManager headerManager,
-			FeignAuthProperties.Http http) {
+			ObjectMapper objectMapper, FeignAuthProperties.Http http) {
 		Assert.notNull(responseParser, "responseParser must not be null");
 		Assert.notNull(headerManager, "headerManager must not be null");
+		Assert.notNull(objectMapper, "objectMapper must not be null");
 		Assert.notNull(http, "http must not be null");
 		this.httpClient = createHttpClient(http);
 		this.responseParser = responseParser;
 		this.headerManager = headerManager;
+		this.objectMapper = objectMapper;
 	}
 
 	/**
