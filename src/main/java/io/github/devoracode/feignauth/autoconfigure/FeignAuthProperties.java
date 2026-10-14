@@ -27,6 +27,11 @@ public class FeignAuthProperties {
 
     private Map<String, Service> services = new HashMap<>();
 
+    // 自定义 @Bean 时显式置空不该让下游 getAuth() 链路 NPE，统一回退默认值
+    public void setAuth(GlobalAuth auth) {
+        this.auth = auth == null ? new GlobalAuth() : auth;
+    }
+
     @Getter
     @Setter
     public static class GlobalAuth {
@@ -36,6 +41,14 @@ public class FeignAuthProperties {
         private Http http = new Http();
 
         private boolean failOnNoMatch = true;
+
+        public void setCache(Cache cache) {
+            this.cache = cache == null ? new Cache() : cache;
+        }
+
+        public void setHttp(Http http) {
+            this.http = http == null ? new Http() : http;
+        }
 
     }
 
@@ -68,6 +81,10 @@ public class FeignAuthProperties {
         private String provider = "local";
 
         private Redis redis = new Redis();
+
+        public void setRedis(Redis redis) {
+            this.redis = redis == null ? new Redis() : redis;
+        }
 
     }
 

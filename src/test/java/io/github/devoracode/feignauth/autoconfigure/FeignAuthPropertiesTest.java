@@ -44,4 +44,23 @@ class FeignAuthPropertiesTest {
 		assertThat(consAuth.getPathPrefixes()).containsExactly("/api/orders");
 	}
 
+	@Test
+	void globalAuthTreeKeepsDefaultsWhenExplicitlySetToNull() {
+		FeignAuthProperties properties = new FeignAuthProperties();
+		properties.setAuth(null);
+
+		assertThat(properties.getAuth()).isNotNull();
+		assertThat(properties.getAuth().isFailOnNoMatch()).isTrue();
+
+		FeignAuthProperties.GlobalAuth globalAuth = new FeignAuthProperties.GlobalAuth();
+		globalAuth.setCache(null);
+		globalAuth.setHttp(null);
+		assertThat(globalAuth.getCache()).isNotNull();
+		assertThat(globalAuth.getHttp()).isNotNull();
+
+		FeignAuthProperties.Cache cache = new FeignAuthProperties.Cache();
+		cache.setRedis(null);
+		assertThat(cache.getRedis().getKeyPrefix()).isEqualTo("feign-auth:");
+	}
+
 }

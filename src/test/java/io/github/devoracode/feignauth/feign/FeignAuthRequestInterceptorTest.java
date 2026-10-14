@@ -99,6 +99,21 @@ class FeignAuthRequestInterceptorTest {
 	}
 
 	@Test
+	void nullGlobalAuthStillFailsWithConfigExceptionInsteadOfNpe() {
+		FeignAuthProperties properties = new FeignAuthProperties();
+		// 自定义 @Bean 场景可能把全局 auth 显式置空，此处必须仍是可读的配置异常
+		properties.setAuth(null);
+		FeignAuthRequestInterceptor interceptor = new FeignAuthRequestInterceptor(
+			new ServiceMatcher(properties), null, new HeaderManager(), properties);
+
+		RequestTemplate template = template("https://unknown.example.com", "/api/data");
+
+		assertThat(org.junit.jupiter.api.Assertions.assertThrows(
+			io.github.devoracode.feignauth.exception.FeignAuthConfigurationException.class,
+			() -> interceptor.apply(template)).getMessage()).contains("fail-on-no-match");
+	}
+
+	@Test
 	void apiKeyHeaderAppliedWhenTargetUrlCarriesConfiguredBasePath() {
 		FeignAuthProperties.Service service = service("api-key", auth -> {
 			auth.setHeaderName("Authorization");
