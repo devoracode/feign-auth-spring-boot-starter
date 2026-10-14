@@ -3,17 +3,23 @@ package io.github.devoracode.feignauth.oauth2;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpServer;
 import io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties;
+import io.github.devoracode.feignauth.exception.FeignAuthConfigurationException;
 import io.github.devoracode.feignauth.exception.FeignAuthTokenException;
 import io.github.devoracode.feignauth.header.HeaderManager;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -67,6 +73,39 @@ class OAuth2TokenRequestClientTest {
 				.hasStackTraceContaining("shut down");
 	}
 
+	@Test
+	void formUrlEncodedContentTypeSwitchesRequestBodyToFormEncoding() {
+		AtomicReference<String> receivedContentType = new AtomicReference<>();
+		AtomicReference<String> receivedBody = new AtomicReference<>();
+		this.server.createContext("/token", exchange -> {
+			receivedContentType.set(exchange.getRequestHeaders().getFirst("Content-Type"));
+			receivedBody.set(readRequestBody(exchange));
+			respond(exchange, 200, "{\"access_token\":\"t\",\"expires_in\":600}");
+		});
+
+		FeignAuthProperties.Service service = service(this.tokenUrl);
+		service.getAuth().getTokenRequestHeaders().put("Content-Type", "application/x-www-form-urlencoded");
+		OAuth2TokenRequestClient client = createClient(new FeignAuthProperties.Http());
+
+		OAuth2AccessToken token = client.requestToken("svc", service, clientCredentials());
+		assertThat(token.getAccessToken()).isEqualTo("t");
+		assertThat(receivedContentType.get()).startsWith("application/x-www-form-urlencoded");
+		assertThat(parseFormBody(receivedBody.get())).containsEntry("client_id", "id")
+				.containsEntry("client_secret", "secret")
+				.containsEntry("grant_type", "client_credentials");
+	}
+
+	@Test
+	void unknownTokenRequestContentTypeFailsFast() {
+		FeignAuthProperties.Service service = service(this.tokenUrl);
+		service.getAuth().getTokenRequestHeaders().put("Content-Type", "text/plain");
+		OAuth2TokenRequestClient client = createClient(new FeignAuthProperties.Http());
+
+		assertThatThrownBy(() -> client.requestToken("svc", service, clientCredentials()))
+				.isInstanceOf(FeignAuthConfigurationException.class)
+				.hasStackTraceContaining("Content-Type");
+	}
+
 	private OAuth2TokenRequestClient createClient(FeignAuthProperties.Http http) {
 		OAuth2TokenResponseParser parser = new OAuth2TokenResponseParser(new ObjectMapper());
 		return new OAuth2TokenRequestClient(parser, new HeaderManager(), http);
@@ -96,6 +135,27 @@ class OAuth2TokenRequestClientTest {
 		catch (InterruptedException ex) {
 			Thread.currentThread().interrupt();
 		}
+	}
+
+	private static String readRequestBody(com.sun.net.httpserver.HttpExchange exchange) throws IOException {
+		try (InputStream in = exchange.getRequestBody()) {
+			ByteArrayOutputStream out = new ByteArrayOutputStream();
+			byte[] buffer = new byte[1024];
+			int read;
+			while ((read = in.read(buffer)) > 0) {
+				out.write(buffer, 0, read);
+			}
+			return new String(out.toByteArray(), StandardCharsets.UTF_8);
+		}
+	}
+
+	private static Map<String, String> parseFormBody(String body) {
+		Map<String, String> pairs = new HashMap<>();
+		for (String pair : body.split("&")) {
+			int index = pair.indexOf('=');
+			pairs.put(pair.substring(0, index), pair.substring(index + 1));
+		}
+		return pairs;
 	}
 
 	private static void respond(com.sun.net.httpserver.HttpExchange exchange, int status, String body) {

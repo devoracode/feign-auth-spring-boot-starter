@@ -121,6 +121,14 @@ feign:
 | 至少配置一个 | 已配置 | 使用 `request-fields.grant-type` 字段名发送 |
 | 至少配置一个 | 未配置 | 不发送 grant-type 参数 |
 
+### 令牌请求体编码
+
+POST 取号的请求体编码由 `token-request-headers` 中的 `Content-Type` 决定（未配置默认 `application/json`）：
+
+- `application/json`（或 `*/*+json`、`text/json` 等 json 类型）：参数以 JSON 对象发送；
+- `application/x-www-form-urlencoded`：参数以表单键值对发送（UTF-8，符合 RFC 6749 的 token 端点惯例）；
+- 其他值或无法解析的值：启动后首次取号即抛 `FeignAuthConfigurationException` 快速失败，不会发出头体错配的请求。
+
 ### Token 响应解析
 
 **Token 字段**：默认依次尝试 `access_token` → `accessToken` → `token`；可通过 `token-field` 指定点分路径（如 `data.accessToken`）。

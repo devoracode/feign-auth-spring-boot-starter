@@ -149,7 +149,7 @@
     {
       "name": "feign.services.*.auth.token-request-headers",
       "type": "java.util.Map<java.lang.String,java.lang.String>",
-      "description": "Static headers added to the OAuth2 token HTTP request for this service."
+      "description": "Static headers added to the OAuth2 token HTTP request for this service. A configured Content-Type controls the POST request body encoding: application/json (default when unset) sends a JSON object, application/x-www-form-urlencoded sends form pairs; other values fail fast."
     },
     {
       "name": "feign.auth.cache.provider",
