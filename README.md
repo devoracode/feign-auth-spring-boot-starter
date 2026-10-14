@@ -205,17 +205,6 @@ feign:
 
 ---
 
-## 1.19.0 升级检查清单
-
-本版本修复两个 P1 缺陷，升级前请自查：
-
-- [ ] **base-url 带路径的写法恢复正常**：`@FeignClient(url = "${feign.services.x.base-url}")` + `base-url: https://api.x.com/v1` 此前会因路径部分不参与归一化而**每个请求抛异常**；现在按 `scheme://host:默认端口` 归一化匹配，配置的 `/v1` 自动作为外层前缀参与路径匹配，**无需**再把路径挪进 `path-prefixes`
-- [ ] **显式默认端口等价**：`https://api.x.com` 与 `https://api.x.com:443`、`http://host` 与 `http://host:80` 现在视为同一服务；非默认端口（如 `:8080`）仍严格区分
-- [ ] **auth.type 拼错不再静默放行**：`oauth`、`apikey` 等错误取值（或整个 `auth` 缺失）此前只打 WARN 后不带鉴权头发出请求，现在直接抛 `FeignAuthConfigurationException`；如确有「故意不鉴权」的服务，请勿为其配置 `base-url` 匹配，或全局设置 `feign.auth.fail-on-no-match: false`（不推荐）
-- [ ] 未匹配异常的**报错信息**已包含已配置服务清单，可据此排查 target URL 与配置不一致的根因
-
----
-
 ## 完整示例配置
 
 ```yaml
