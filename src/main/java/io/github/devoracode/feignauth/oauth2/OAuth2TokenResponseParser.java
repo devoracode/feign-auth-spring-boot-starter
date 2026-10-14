@@ -24,6 +24,9 @@ public class OAuth2TokenResponseParser {
 
 	private static final long DEFAULT_EXPIRES_IN_SECONDS = 7200L;
 
+	// TTL 上限取 1 天：超长有效期收敛为每日刷新，同时保证 *1000 不会 long 溢出
+	private static final long MAX_TTL_SECONDS = 24 * 60 * 60L;
+
 	private static final int MAX_EXPIRES_IN_SEARCH_DEPTH = 3;
 
 	private static final List<String> EXPIRES_IN_FIELD_NAMES = Arrays.asList("expires_in", "expiresIn", "expire_in",
@@ -62,8 +65,11 @@ public class OAuth2TokenResponseParser {
 
 			OAuth2AccessToken accessToken = new OAuth2AccessToken();
 			accessToken.setAccessToken(token);
-			accessToken.setExpireAt(System.currentTimeMillis() + refreshIn * 1000L);
-			accessToken.setTtl(refreshIn);
+			// 巨大 expires_in（如服务端误把毫秒当秒返回）不得溢出为负 expireAt，
+			// 否则 token 立即被判过期、每个请求都触发取号；统一钳制到 1 天上限。
+			long safeRefreshIn = Math.min(refreshIn, MAX_TTL_SECONDS);
+			accessToken.setExpireAt(System.currentTimeMillis() + safeRefreshIn * 1000L);
+			accessToken.setTtl(safeRefreshIn);
 			return accessToken;
 		}
 		catch (FeignAuthTokenException ex) {

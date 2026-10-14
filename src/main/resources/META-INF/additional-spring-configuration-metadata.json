@@ -89,7 +89,7 @@
     {
       "name": "feign.services.*.auth.token-expires-in-seconds",
       "type": "java.lang.Long",
-      "description": "Configured OAuth2 access token TTL in seconds. When set to a positive value, overrides expires_in / expiresIn / expire_in / expireIn fields in the token response."
+      "description": "Configured OAuth2 access token TTL in seconds. When set to a positive value, overrides expires_in / expiresIn / expire_in / expireIn fields in the token response. Effective TTL is capped at 86400 seconds (1 day)."
     },
     {
       "name": "feign.services.*.auth.request-fields.client-id",

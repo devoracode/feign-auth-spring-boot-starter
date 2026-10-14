@@ -82,4 +82,38 @@ class OAuth2TokenResponseParserTest {
 		assertThat(ttlMillis).isBetween(0L, 1000L);
 	}
 
+	@Test
+	void clampsHugeExpiresInToOneDayCap() {
+		String body = "{\"access_token\":\"token-value\",\"expires_in\":9223372036854775807}";
+		OAuth2AccessToken accessToken = this.parser.parse(200, body, 60L, null, null);
+
+		assertThat(accessToken.getTtl()).isEqualTo(86400L);
+		assertThat(accessToken.getExpireAt()).isGreaterThan(System.currentTimeMillis());
+	}
+
+	@Test
+	void clampsHugeConfiguredExpiresInSecondsToDailyCap() {
+		String body = "{\"access_token\":\"token-value\",\"expires_in\":3600}";
+		OAuth2AccessToken accessToken = this.parser.parse(200, body, 60L, null, Long.MAX_VALUE);
+
+		assertThat(accessToken.getTtl()).isEqualTo(86400L);
+		assertThat(accessToken.getExpireAt()).isGreaterThan(System.currentTimeMillis());
+	}
+
+	@Test
+	void clampsMultiDayExpiresInToDailyCap() {
+		String body = "{\"access_token\":\"token-value\",\"expires_in\":172800}";
+		OAuth2AccessToken accessToken = this.parser.parse(200, body, 60L, null, null);
+
+		assertThat(accessToken.getTtl()).isEqualTo(86400L);
+	}
+
+	@Test
+	void keepsExpiresInAtExactlyOneDayUnclamped() {
+		String body = "{\"access_token\":\"token-value\",\"expires_in\":86400}";
+		OAuth2AccessToken accessToken = this.parser.parse(200, body, 0L, null, null);
+
+		assertThat(accessToken.getTtl()).isEqualTo(86400L);
+	}
+
 }
