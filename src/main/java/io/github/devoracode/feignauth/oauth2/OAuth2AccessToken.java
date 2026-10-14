@@ -1,5 +1,6 @@
 package io.github.devoracode.feignauth.oauth2;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Setter;
@@ -28,6 +29,8 @@ public class OAuth2AccessToken implements Serializable {
 
 	private long expireAt;
 
+	// 非存储字段：不参与 Redis JSON 序列化/反序列化
+	@JsonIgnore
 	public boolean isExpired() {
 		return System.currentTimeMillis() >= this.expireAt;
 	}

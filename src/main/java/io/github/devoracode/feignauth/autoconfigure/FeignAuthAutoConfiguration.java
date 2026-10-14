@@ -26,7 +26,7 @@ import org.springframework.boot.autoconfigure.jackson.JacksonAutoConfiguration;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
 import java.util.Collections;
@@ -79,12 +79,12 @@ public class FeignAuthAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(TokenStore.class)
-    @ConditionalOnClass(RedisTemplate.class)
-    @ConditionalOnBean(RedisTemplate.class)
+    @ConditionalOnClass(RedisConnectionFactory.class)
+    @ConditionalOnBean(RedisConnectionFactory.class)
     @ConditionalOnProperty(prefix = "feign.auth.cache", name = "provider", havingValue = "redis")
-    public TokenStore redisTokenStore(RedisTemplate<Object, Object> redisTemplate,
+    public TokenStore redisTokenStore(RedisConnectionFactory redisConnectionFactory,
                                       FeignAuthProperties properties) {
-        return new RedisTokenStore(redisTemplate, properties.getAuth().getCache().getRedis());
+        return new RedisTokenStore(redisConnectionFactory, properties.getAuth().getCache().getRedis());
     }
 
     @Bean
@@ -97,12 +97,15 @@ public class FeignAuthAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(LockProvider.class)
-    @ConditionalOnClass(StringRedisTemplate.class)
-    @ConditionalOnBean(StringRedisTemplate.class)
+    @ConditionalOnClass(RedisConnectionFactory.class)
+    @ConditionalOnBean(RedisConnectionFactory.class)
     @ConditionalOnProperty(prefix = "feign.auth.cache",
         name = "provider", havingValue = "redis")
-    public LockProvider redisLockProvider(StringRedisTemplate redisTemplate, FeignAuthProperties properties) {
-        return new RedisLockProvider(redisTemplate, properties.getAuth().getCache().getRedis());
+    public LockProvider redisLockProvider(RedisConnectionFactory redisConnectionFactory,
+                                          FeignAuthProperties properties) {
+        // 自建 StringRedisTemplate：不依赖容器里是否存在同名/同类型 Bean
+        return new RedisLockProvider(new StringRedisTemplate(redisConnectionFactory),
+            properties.getAuth().getCache().getRedis());
     }
 
     @Configuration(proxyBeanMethods = false)

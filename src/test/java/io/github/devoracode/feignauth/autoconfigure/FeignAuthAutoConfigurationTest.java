@@ -58,6 +58,20 @@ class FeignAuthAutoConfigurationTest {
 				});
 	}
 
+	@Test
+	void redisProviderWorksViaConnectionFactoryWithoutAnyUserTemplates() {
+		this.runner.withPropertyValues("feign.auth.cache.provider=redis")
+				.withBean(org.springframework.data.redis.connection.RedisConnectionFactory.class,
+						() -> org.mockito.Mockito.mock(org.springframework.data.redis.connection.RedisConnectionFactory.class))
+				.run(context -> {
+					assertThat(context).hasSingleBean(
+							io.github.devoracode.feignauth.oauth2.store.RedisTokenStore.class);
+					assertThat(context).hasSingleBean(
+							io.github.devoracode.feignauth.oauth2.lock.RedisLockProvider.class);
+					assertThat(context).hasSingleBean(io.github.devoracode.feignauth.oauth2.TokenFetcher.class);
+				});
+	}
+
 	private static FeignAuthProperties.Service oauth2Service() {
 		FeignAuthProperties.Service service = new FeignAuthProperties.Service();
 		service.setBaseUrl("http://127.0.0.1");
