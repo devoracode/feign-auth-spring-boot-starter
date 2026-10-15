@@ -35,7 +35,7 @@ Spring Boot Starter，为 OpenFeign 提供多服务鉴权自动注入与自定�
 - 静态固定 Header：在 YAML 中配置 `request-headers`（业务请求）与 `token-request-headers`（Token 请求）
 - 动态 Header 注入：实现 `HeaderCustomizer` 接口，按服务维度注入任意动态计算的 Header
 - 可插拔缓存机制：支持本地缓存（ConcurrentHashMap）和 Redis 缓存，自动清理过期 Token
-- 可插拔锁机制：支持本地锁（synchronized）和 Redis 分布式锁，防止并发请求重复获取 Token
+- 可插拔锁机制：支持本地锁（分段 ReentrantLock）和 Redis 分布式锁，防止并发请求重复获取 Token
 - 无匹配服务时默认快速失败（抛 `FeignAuthConfigurationException`），可配置 `feign.auth.fail-on-no-match: false` 回退为 WARN 后放行
 
 ---
@@ -237,15 +237,15 @@ feign:
         clients:
           - id: event-client
             secret: event-secret
-            grant-type: credentials
+            grant-type: client_credentials
             path-prefixes: [/api/measure/event, /api/measure/event2]
           - id: telemetry-client
             secret: telemetry-secret
-            grant-type: credentials
+            grant-type: client_credentials
             path-prefixes: [/api/measure/telemetry]
           - id: default-client             # 默认 Client（兜底）
             secret: default-secret
-            grant-type: credentials
+            grant-type: client_credentials
 
     # OAuth2 — GET 方式获取 Token，自定义字段名
     ast:

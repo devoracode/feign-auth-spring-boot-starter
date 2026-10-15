@@ -79,12 +79,13 @@
     {
       "name": "feign.services.*.auth.expired-token-statuses",
       "type": "java.util.List<java.lang.Integer>",
-      "description": "HTTP status codes that trigger token refresh retry. Defaults to [401, 421, 423]."
+      "description": "HTTP status codes treated as an expired token, evicting the cached token and retrying once. Only non-2xx responses are inspected. When unset or empty, the built-in default applies.",
+      "defaultValue": [401, 421, 423]
     },
     {
       "name": "feign.services.*.auth.response-status-field",
       "type": "java.lang.String",
-      "description": "JSON field path in response body to check for expired token status. Supports dot-separated paths like 'data.code'. When not set, only HTTP status codes are used for expired token detection."
+      "description": "JSON field path in response body to check for expired token status. Supports dot-separated paths like 'data.code'. Only evaluated for non-2xx responses whose HTTP status is not already in expired-token-statuses, and only for oauth2 services. When not set, only HTTP status codes are used for expired token detection."
     },
     {
       "name": "feign.services.*.auth.token-field",
