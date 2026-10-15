@@ -31,7 +31,7 @@ Spring Boot Starter，为 OpenFeign 提供多服务鉴权自动注入与自定�
 - 自定义 Token 请求字段名（如 `appId` / `appSecret` 替代 `client_id` / `client_secret`）
 - 从 Token 响应中自定义提取字段路径（如 `data.accessToken`），自动解析过期时间
 - Token 过期自动驱逐缓存并重试（默认 HTTP 401 / 421 / 423，可通过配置自定义状态码；同一 `{service}:{client}` 的驱逐有 30 秒冷却，冷却期内直接抛不可重试异常，详见「重试与请求重放」；默认 Retryer 可被自定义 Bean 覆盖）
-- 支持从响应体中解析过期状态码（需配置 `response-status-field`，适用于不规范的第三方 API 返回 HTTP 200/400 但在响应体中包含过期状态）
+- 支持从响应体中解析业务状态码识别过期令牌（需配置 `response-status-field`，仅对非 2xx 响应生效，详见「过期令牌的识别」）
 - 静态固定 Header：在 YAML 中配置 `request-headers`（业务请求）与 `token-request-headers`（Token 请求）
 - 动态 Header 注入：实现 `HeaderCustomizer` 接口，按服务维度注入任意动态计算的 Header
 - 可插拔缓存机制：支持本地缓存（ConcurrentHashMap）和 Redis 缓存，自动清理过期 Token
@@ -96,7 +96,7 @@ feign:
           - 401
           - 421
           - 423
-        response-status-field: code           # 响应体中状态码字段路径，支持点分隔如 data.code，不填则仅使用 HTTP 状态码判断
+        response-status-field: code           # 响应体中的业务状态码字段路径，支持点分隔如 data.code；仅当 HTTP 状态码不属于 expired-token-statuses 且响应为非 2xx 时才检查，不填则只看 HTTP 状态码
         request-fields:                     # 自定义 Token 请求字段名（均可选）
           client-id: clientId               # 默认 client_id
           client-secret: clientSecret       # 默认 client_secret
@@ -113,6 +113,15 @@ feign:
             secret: default-secret
             grant-type: client_credentials
 ```
+
+### 过期令牌的识别
+
+远端响应满足下列任一条件时，starter 认定缓存 token 已过期，驱逐缓存并重放一次请求：
+
+- HTTP 状态码命中 `expired-token-statuses`（默认 `[401, 421, 423]`）；
+- HTTP 状态码不在该列表中、该服务为 OAuth2、且配置了 `response-status-field` 时，解析响应体中该字段的值（支持 `data.code` 这类点分路径），值命中 `expired-token-statuses` 同样触发。用于「HTTP 码不规范、真实原因写在响应体里」的接口，例如返回 `400` 且响应体为 `{"code":401,"msg":"token expired"}`。
+
+> 这条判定挂在 Feign 的 `ErrorDecoder` 上，只有**非 2xx** 的响应才会进入。因此「返回 HTTP 200、却在响应体里报 token 过期」的接口无法通过 `response-status-field` 识别——这类接口需要业务方自行处理，或为服务端争取规范状态码。
 
 ### grant-type 发送规则
 
