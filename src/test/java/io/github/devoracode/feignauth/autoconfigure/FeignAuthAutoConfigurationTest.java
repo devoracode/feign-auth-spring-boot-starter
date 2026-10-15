@@ -72,6 +72,14 @@ class FeignAuthAutoConfigurationTest {
 				});
 	}
 
+	@Test
+	void invalidHttpPropertyFailsStartupNamingTheKey() {
+		this.runner.withPropertyValues("feign.auth.http.socket-timeout=0s").run(context -> {
+			assertThat(context).hasFailed();
+			assertThat(context.getStartupFailure()).hasStackTraceContaining("feign.auth.http.socket-timeout");
+		});
+	}
+
 	private static FeignAuthProperties.Service oauth2Service() {
 		FeignAuthProperties.Service service = new FeignAuthProperties.Service();
 		service.setBaseUrl("http://127.0.0.1");
