@@ -164,6 +164,8 @@ feign:
 
 该客户端注册为 Spring 容器管理的 Bean，应用上下文关闭时自动 `close()` 释放连接池与空闲连接驱逐线程。如需替换实现（例如换用其他 HTTP 客户端），直接声明自己的 `OAuth2TokenRequestClient` Bean 即可，starter 默认实现会自动让位并被默认 `TokenFetcher` 采用。
 
+**取号请求不会被客户端自动追加**：Apache HttpClient 默认的自动重试与 3xx 重定向跟随均已显式关闭。连接中断/读取超时直接失败，不再对同一取号静默补发；IdP 返回 3xx 时按非 2xx 抛出异常，`Authorization` 与请求参数不会随重定向送出到 `Location` 指向的地址。是否重试由 Feign `Retryer` 与令牌淘汰冷却决定（见「重试与请求重放」），不再叠加 HTTP 客户端层的隐式重试。
+
 ## API Key 配置
 
 ```yaml
@@ -478,6 +480,8 @@ feign:
 - 利用 Redis TTL 自动过期机制
 - 多实例共享 Token，避免重复获取
 - Spring Data Redis 已随 starter 传递引入，无需单独声明依赖；使用方只需配置 Redis 连接（`spring.redis.*` 等）使容器中存在 `RedisConnectionFactory`
+- 存储格式：键为纯 String（见上方 Key 格式表），值为**带类型信息（`@class`）的 JSON**，由 starter 自建的 `RedisTemplate`（`StringRedisSerializer` 键 + `GenericJackson2JsonRedisSerializer` 值）读写，不借用容器中已有的 `RedisTemplate` / `StringRedisTemplate` 及其序列化器，因此使用方或其他组件的序列化配置不会破坏令牌读写
+- 排障时可直接 `GET feign-auth:token:{serviceName}:{clientId}` 查看内容；读到无法反序列化的值（旧格式残留、人为改写等）会 WARN 后删除，并在下次取号时按当前格式重建。注意该 JSON 内含令牌明文，Redis 实例需按敏感数据要求做访问控制与持久化策略
 
 ### 锁机制
 
