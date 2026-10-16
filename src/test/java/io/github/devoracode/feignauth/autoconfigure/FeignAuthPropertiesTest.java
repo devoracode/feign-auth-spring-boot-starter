@@ -82,6 +82,14 @@ class FeignAuthPropertiesTest {
 		absent.getAuth().getHttp().setConnectionRequestTimeout(null);
 		assertThatThrownBy(absent::afterPropertiesSet)
 				.hasMessageContaining("feign.auth.http.connection-request-timeout");
+
+		// 不足 1 毫秒的值四舍五入后同样是 0 = 无限等待。启动期必须与 OAuth2TokenRequestClient.toMillis
+		// 同一口径：使用方自定义 TokenFetcher Bean 时内嵌配置整组让位、客户端 Bean 不再创建，
+		// 启动校验是这类值唯一的拦截点
+		FeignAuthProperties subMillisecond = new FeignAuthProperties();
+		subMillisecond.getAuth().getHttp().setSocketTimeout(Duration.ofNanos(500_000L));
+		assertThatThrownBy(subMillisecond::afterPropertiesSet)
+				.hasMessageContaining("feign.auth.http.socket-timeout");
 	}
 
 	@Test

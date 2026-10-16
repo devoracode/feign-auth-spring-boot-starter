@@ -101,9 +101,10 @@ public class FeignAuthProperties implements InitializingBean {
         }
     }
 
-    // RequestConfig 把 0 解释为无限等待，负 Duration 又被 toMillis 钳成 0，故两者一律拒绝
+    // RequestConfig 把 0 解释为无限等待，故凡是折算到毫秒后不大于 0 的一律拒绝：
+    // 0、负值、以及不足 1 毫秒的正值（四舍五入后同样是 0）。口径与 OAuth2TokenRequestClient.toMillis 一致
     private static void requirePositiveDuration(String key, Duration timeout) {
-        if (timeout == null || timeout.isZero() || timeout.isNegative()) {
+        if (timeout == null || timeout.toMillis() <= 0L) {
             throw invalid(key, timeout, "must be a positive duration (0 means infinite wait)");
         }
     }
