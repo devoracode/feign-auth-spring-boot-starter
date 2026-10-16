@@ -27,6 +27,12 @@ jobs:
         server-password: CENTRAL_PASSWORD
         gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
         gpg-passphrase: GPG_PASSPHRASE
+    - name: Show Maven environment
+      run: |
+        java -version
+        mvn -version
+    - name: Clean
+      run: mvn --batch-mode clean
 
     - name: Publish to Maven Central
       run: mvn --batch-mode deploy -DskipTests
