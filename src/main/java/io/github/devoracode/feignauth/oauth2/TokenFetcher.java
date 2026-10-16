@@ -99,11 +99,15 @@ public class TokenFetcher {
 			}
 			return false;
 		}
-		this.lastEvictionMillis.put(cacheKey, now);
 		boolean removed = this.tokenStore.remove(cacheKey);
-		if (removed && logger.isInfoEnabled()) {
-			logger.info("FeignAuth [oauth2] token evicted for service='" + serviceName + "', clientId='"
-					+ client.getId() + "'");
+		// 只在真正驱逐到令牌时才起算冷却：空转的淘汰（缓存已按 TTL 自行过期）或 remove 抛异常
+		// 都不该写入时间戳，否则会把随后确实能驱逐成功的尝试一并锁死 30 秒
+		if (removed) {
+			this.lastEvictionMillis.put(cacheKey, now);
+			if (logger.isInfoEnabled()) {
+				logger.info("FeignAuth [oauth2] token evicted for service='" + serviceName + "', clientId='"
+						+ client.getId() + "'");
+			}
 		}
 		return removed;
 	}

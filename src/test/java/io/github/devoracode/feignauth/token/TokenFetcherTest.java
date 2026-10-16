@@ -15,9 +15,15 @@ import io.github.devoracode.feignauth.oauth2.store.TokenStore;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 class TokenFetcherTest {
 
@@ -48,14 +54,62 @@ class TokenFetcherTest {
 				.hasMessageContaining("Multiple default OAuth2 clients");
 	}
 
+	@Test
+	void evictingNothingKeepsTheNextEvictionAttemptAlive() {
+		FeignAuthProperties properties = new FeignAuthProperties();
+		properties.setServices(services(oauth2Service(client("c1"))));
+		TokenStore tokenStore = mock(TokenStore.class);
+		when(tokenStore.remove("svc:c1")).thenReturn(false, true);
+		TokenFetcher tokenFetcher = createTokenFetcher(properties, tokenStore);
+
+		// 缓存里的令牌已按 TTL 自行过期：本次什么都没驱逐，不该因此锁死后续真正的淘汰机会
+		assertThat(tokenFetcher.invalidateToken("svc", "/api/x")).isFalse();
+		assertThat(tokenFetcher.invalidateToken("svc", "/api/x")).isTrue();
+	}
+
+	@Test
+	void evictionFailureLeavesNoCooldownBehind() {
+		FeignAuthProperties properties = new FeignAuthProperties();
+		properties.setServices(services(oauth2Service(client("c1"))));
+		TokenStore tokenStore = mock(TokenStore.class);
+		when(tokenStore.remove("svc:c1")).thenThrow(new RuntimeException("redis down")).thenReturn(true);
+		TokenFetcher tokenFetcher = createTokenFetcher(properties, tokenStore);
+
+		assertThatThrownBy(() -> tokenFetcher.invalidateToken("svc", "/api/x"))
+				.hasMessage("redis down");
+		assertThat(tokenFetcher.invalidateToken("svc", "/api/x")).isTrue();
+	}
+
+	@Test
+	void productiveEvictionStartsTheCooldownWindow() {
+		FeignAuthProperties properties = new FeignAuthProperties();
+		properties.setServices(services(oauth2Service(client("c1"))));
+		TokenStore tokenStore = mock(TokenStore.class);
+		when(tokenStore.remove("svc:c1")).thenReturn(true);
+		TokenFetcher tokenFetcher = createTokenFetcher(properties, tokenStore);
+
+		assertThat(tokenFetcher.invalidateToken("svc", "/api/x")).isTrue();
+		assertThat(tokenFetcher.invalidateToken("svc", "/api/x")).isFalse();
+		verify(tokenStore, times(1)).remove("svc:c1");
+	}
+
 	private static TokenFetcher createTokenFetcher(FeignAuthProperties properties) {
+		return createTokenFetcher(properties, new LocalTokenStore());
+	}
+
+	private static TokenFetcher createTokenFetcher(FeignAuthProperties properties, TokenStore tokenStore) {
 		ObjectMapper objectMapper = new ObjectMapper();
 		OAuth2TokenRequestClient tokenRequestClient = new OAuth2TokenRequestClient(
 				new OAuth2TokenResponseParser(objectMapper), new HeaderManager(), objectMapper,
 				new FeignAuthProperties.Http());
-		TokenStore tokenStore = new LocalTokenStore();
 		LockProvider lockProvider = new LocalLockProvider();
 		return new TokenFetcher(properties, new OAuth2ClientMatcher(), tokenRequestClient, tokenStore, lockProvider);
+	}
+
+	private static Map<String, FeignAuthProperties.Service> services(FeignAuthProperties.Service service) {
+		Map<String, FeignAuthProperties.Service> map = new HashMap<>();
+		map.put("svc", service);
+		return map;
 	}
 
 	private static FeignAuthProperties.Service oauth2Service(FeignAuthProperties.Client... clients) {
