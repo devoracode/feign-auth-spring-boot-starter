@@ -121,6 +121,8 @@ feign:
 - HTTP 状态码命中 `expired-token-statuses`（默认 `[401, 421, 423]`）；
 - HTTP 状态码不在该列表中、该服务为 OAuth2、且配置了 `response-status-field` 时，解析响应体中该字段的值（支持 `data.code` 这类点分路径），值命中 `expired-token-statuses` 同样触发。用于「HTTP 码不规范、真实原因写在响应体里」的接口，例如返回 `400` 且响应体为 `{"code":401,"msg":"token expired"}`。
 
+> `expired-token-statuses` 同时用于上述两处匹配，因此**配置了 `response-status-field` 时允许填写业务状态码**（如 `10001`、`-1`）。未配置该字段时，启动校验会要求取值落在 100–599 之间，以拦截 `4010` 这类明显的 HTTP 码笔误。
+
 > 这条判定挂在 Feign 的 `ErrorDecoder` 上，只有**非 2xx** 的响应才会进入。因此「返回 HTTP 200、却在响应体里报 token 过期」的接口无法通过 `response-status-field` 识别——这类接口需要业务方自行处理，或为服务端争取规范状态码。
 
 ### grant-type 发送规则

@@ -79,7 +79,7 @@
     {
       "name": "feign.services.*.auth.expired-token-statuses",
       "type": "java.util.List<java.lang.Integer>",
-      "description": "HTTP status codes treated as an expired token, evicting the cached token and retrying once. Only non-2xx responses are inspected. When unset or empty, the built-in default applies.",
+      "description": "Status codes treated as an expired token, evicting the cached token and retrying once. Matched against the HTTP response status and, when response-status-field is set, also against the value of that response-body field, so business status codes such as 10001 are allowed there. Only non-2xx responses are inspected. When unset or empty, the built-in default [401, 421, 423] applies.",
       "defaultValue": [401, 421, 423]
     },
     {

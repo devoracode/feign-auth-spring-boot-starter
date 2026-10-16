@@ -90,7 +90,27 @@ class FeignAuthPropertiesTest {
 				.hasMessageContaining("feign.services.order.auth.expire-ahead-seconds");
 		assertThatThrownBy(propertiesWithAuth(auth -> auth.setTokenExpiresInSeconds(0L))::afterPropertiesSet)
 				.hasMessageContaining("feign.services.order.auth.token-expires-in-seconds");
+	}
+
+	@Test
+	void nonHttpExpiredTokenStatusIsRejectedWhenOnlyHttpCodesAreUsed() {
+		// 未配置 response-status-field 时列表只会与 HTTP 码比较，范围外的值必然是笔误
 		assertThatThrownBy(propertiesWithAuth(auth -> auth.getExpiredTokenStatuses().add(4010))::afterPropertiesSet)
+				.hasMessageContaining("feign.services.order.auth.expired-token-statuses");
+	}
+
+	@Test
+	void businessStatusCodeIsAllowedTogetherWithResponseStatusField() {
+		// 业务状态码（如 10001）是 response-status-field 的正常用法，不得被判为非法配置
+		propertiesWithAuth(auth -> {
+			auth.setResponseStatusField("code");
+			auth.getExpiredTokenStatuses().add(10001);
+		}).afterPropertiesSet();
+	}
+
+	@Test
+	void nullEntryInExpiredTokenStatusesIsAlwaysRejected() {
+		assertThatThrownBy(propertiesWithAuth(auth -> auth.getExpiredTokenStatuses().add(null))::afterPropertiesSet)
 				.hasMessageContaining("feign.services.order.auth.expired-token-statuses");
 	}
 

@@ -73,13 +73,30 @@ public class FeignAuthProperties implements InitializingBean {
         if (tokenExpiresInSeconds != null && tokenExpiresInSeconds <= 0L) {
             throw invalid(keyPrefix + "token-expires-in-seconds", tokenExpiresInSeconds, "must be greater than 0");
         }
+        validateExpiredTokenStatuses(keyPrefix, auth);
+    }
+
+    /**
+     * {@code expired-token-statuses} 有两个消费位置：HTTP 响应状态码匹配，以及配置了
+     * {@code response-status-field} 时对响应体字段值的匹配——后者允许是 10001 / -1 这类
+     * 业务状态码（见 README「过期令牌的识别」）。因此只在未配置 {@code response-status-field}
+     * 时才按 HTTP 码范围校验：此时列表只会与 HTTP 码比较，范围外的值必然是笔误；
+     * 配置了业务码字段则一律放行，仅禁止 null 元素。
+     */
+    private static void validateExpiredTokenStatuses(String keyPrefix, Auth auth) {
         List<Integer> statuses = auth.getExpiredTokenStatuses();
-        if (statuses != null) {
-            for (Integer status : statuses) {
-                if (status == null || status < 100 || status > 599) {
-                    throw invalid(keyPrefix + "expired-token-statuses", status,
-                            "must be an HTTP status code between 100 and 599");
-                }
+        if (statuses == null) {
+            return;
+        }
+        boolean businessStatusCodeEnabled = StringUtils.isNotBlank(auth.getResponseStatusField());
+        for (Integer status : statuses) {
+            if (status == null) {
+                throw invalid(keyPrefix + "expired-token-statuses", null, "must not contain null");
+            }
+            if (!businessStatusCodeEnabled && (status < 100 || status > 599)) {
+                throw invalid(keyPrefix + "expired-token-statuses", status,
+                        "must be an HTTP status code between 100 and 599; business status codes such as"
+                                + " 10001 are allowed only together with response-status-field");
             }
         }
     }
