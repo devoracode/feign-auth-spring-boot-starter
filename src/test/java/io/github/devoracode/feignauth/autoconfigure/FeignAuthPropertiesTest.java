@@ -103,6 +103,39 @@ class FeignAuthPropertiesTest {
 	}
 
 	@Test
+	void illegalCacheProviderIsRejectedAtStartup() {
+		// provider 拼错时 local/redis 两组 Bean 的条件都不成立，使用方只会看到「没有 RedisConnectionFactory」
+		// 这条与根因无关的消息；取值本身应该在启动期就拦住
+		FeignAuthProperties properties = new FeignAuthProperties();
+		properties.getAuth().getCache().setProvider("rediss");
+
+		assertThatThrownBy(properties::afterPropertiesSet)
+				.isInstanceOf(FeignAuthConfigurationException.class)
+				.hasMessageContaining("feign.auth.cache.provider");
+	}
+
+	@Test
+	void nullCacheProviderIsRejectedAtStartup() {
+		FeignAuthProperties properties = new FeignAuthProperties();
+		properties.getAuth().getCache().setProvider(null);
+
+		assertThatThrownBy(properties::afterPropertiesSet)
+				.isInstanceOf(FeignAuthConfigurationException.class)
+				.hasMessageContaining("feign.auth.cache.provider");
+	}
+
+	@Test
+	void cacheProviderAcceptsAnyLetterCase() {
+		// @ConditionalOnProperty 的 havingValue 比较忽略大小写（实测 REDIS/Local 都能命中对应 Bean），
+		// 校验必须同口径，否则会拒掉本来可用的配置
+		for (String provider : new String[] {"local", "LOCAL", "Local", "redis", "REDIS", "Redis"}) {
+			FeignAuthProperties properties = new FeignAuthProperties();
+			properties.getAuth().getCache().setProvider(provider);
+			properties.afterPropertiesSet();
+		}
+	}
+
+	@Test
 	void tokenNumericBoundsAreValidatedPerService() {
 		assertThatThrownBy(propertiesWithAuth(auth -> auth.setExpireAheadSeconds(-1))::afterPropertiesSet)
 				.hasMessageContaining("feign.services.order.auth.expire-ahead-seconds");

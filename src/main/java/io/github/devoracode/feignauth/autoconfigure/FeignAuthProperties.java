@@ -37,6 +37,7 @@ public class FeignAuthProperties implements InitializingBean {
     @Override
     public void afterPropertiesSet() {
         validateHttp(this.auth.getHttp());
+        validateCacheProvider(this.auth.getCache());
         validateKeyPrefix(this.auth.getCache().getRedis());
         if (this.services != null) {
             this.services.forEach(FeignAuthProperties::validateService);
@@ -54,6 +55,19 @@ public class FeignAuthProperties implements InitializingBean {
     private static void validateKeyPrefix(Redis redis) {
         if (redis.getKeyPrefix() == null) {
             throw invalid("feign.auth.cache.redis.key-prefix", null, "must not be null");
+        }
+    }
+
+    /**
+     * {@code cache.provider} 只有 local/redis 两个取值：拼错时两组 Bean 的条件都不成立，
+     * 使用方只会看到「没有 RedisConnectionFactory」这条与根因无关的消息，故在此按实际值拦住。
+     * 比较用 {@code equalsIgnoreCase}——{@code @ConditionalOnProperty} 的 havingValue 就是这么匹配的，
+     * 收紧成区分大小写会反过来拒掉本来能正常装配的配置。
+     */
+    private static void validateCacheProvider(Cache cache) {
+        String provider = cache.getProvider();
+        if (!"local".equalsIgnoreCase(provider) && !"redis".equalsIgnoreCase(provider)) {
+            throw invalid("feign.auth.cache.provider", provider, "must be either 'local' or 'redis'");
         }
     }
 
