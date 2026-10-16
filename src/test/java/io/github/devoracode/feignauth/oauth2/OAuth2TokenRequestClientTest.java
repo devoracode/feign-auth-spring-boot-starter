@@ -300,6 +300,17 @@ class OAuth2TokenRequestClientTest {
 		assertThat(body.isTruncated()).isFalse();
 	}
 
+	@Test
+	void hugeTimeoutIsTruncatedToIntMaxInsteadOfOverflowing() throws IOException {
+		// 超过 int 上限的时长按既有约定截断为 Integer.MAX_VALUE；修复前 toMillis() 的 multiplyExact
+		// 会先抛 ArithmeticException，绕过点名配置键的异常口径
+		FeignAuthProperties.Http http = new FeignAuthProperties.Http();
+		http.setSocketTimeout(Duration.ofSeconds(Long.MAX_VALUE / 2));
+
+		OAuth2TokenRequestClient client = createClient(http);
+		client.close();
+	}
+
 	private static String repeat(char value, int count) {
 		char[] chars = new char[count];
 		Arrays.fill(chars, value);

@@ -291,12 +291,17 @@ public class OAuth2TokenRequestClient implements AutoCloseable {
 
 	// RequestConfig 把 0 当无限等待，因此不足 1 毫秒的正值也必须拒绝：它会四舍五入成 0
 	private static int toMillis(Duration timeout, String key) {
-		if (timeout == null || timeout.toMillis() <= 0L) {
+		// 上下界都用 compareTo 比较：toMillis() 的 seconds*1000 走 multiplyExact，超大时长会先抛
+		// ArithmeticException，绕过这里点名配置键的异常口径
+		if (timeout == null || timeout.compareTo(Duration.ofMillis(1)) < 0) {
 			throw new FeignAuthConfigurationException("FeignAuth: invalid configuration " + key + "=" + timeout
 					+ ", must be a positive duration (0 means infinite wait)");
 		}
 		// 超过 int 上限的超大时长截断为 Integer.MAX_VALUE（HttpClient 参数为 int 毫秒）
-		return (int) Math.min(timeout.toMillis(), Integer.MAX_VALUE);
+		if (timeout.compareTo(Duration.ofMillis(Integer.MAX_VALUE)) > 0) {
+			return Integer.MAX_VALUE;
+		}
+		return (int) timeout.toMillis();
 	}
 
 	private static Map<String, String> buildTokenRequestParameters(FeignAuthProperties.Auth auth,

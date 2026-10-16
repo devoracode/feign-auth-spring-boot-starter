@@ -93,6 +93,16 @@ class FeignAuthPropertiesTest {
 	}
 
 	@Test
+	void hugeTimeoutIsAcceptedInsteadOfOverflowingToArithmeticException() {
+		// Duration.toMillis() 内部是 multiplyExact：超大时长会先抛 ArithmeticException，
+		// 消息里既没有配置键、也不是「invalid configuration」口径
+		FeignAuthProperties properties = new FeignAuthProperties();
+		properties.getAuth().getHttp().setSocketTimeout(Duration.ofSeconds(Long.MAX_VALUE / 2));
+
+		properties.afterPropertiesSet();
+	}
+
+	@Test
 	void tokenNumericBoundsAreValidatedPerService() {
 		assertThatThrownBy(propertiesWithAuth(auth -> auth.setExpireAheadSeconds(-1))::afterPropertiesSet)
 				.hasMessageContaining("feign.services.order.auth.expire-ahead-seconds");
