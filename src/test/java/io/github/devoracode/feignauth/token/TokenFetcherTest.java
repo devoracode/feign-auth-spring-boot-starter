@@ -100,6 +100,19 @@ class TokenFetcherTest {
 	}
 
 	@Test
+	void customStoreConfigurationExceptionIsPassedThroughUnwrapped() {
+		FeignAuthProperties properties = new FeignAuthProperties();
+		properties.setServices(services(oauth2Service(client("c1"))));
+		TokenStore tokenStore = mock(TokenStore.class);
+		FeignAuthConfigurationException original = new FeignAuthConfigurationException("store misconfigured");
+		when(tokenStore.remove("svc:c1")).thenThrow(original);
+		TokenFetcher tokenFetcher = createTokenFetcher(properties, tokenStore);
+
+		// starter 自己声明的两类异常都不该被二次包装：包装后业务方按配置错误处理的分支就接不到了
+		assertThatThrownBy(() -> tokenFetcher.invalidateToken("svc", "/api/x")).isSameAs(original);
+	}
+
+	@Test
 	void resolveClientCollapsesRepeatedSlashes() {
 		FeignAuthProperties properties = new FeignAuthProperties();
 		TokenFetcher tokenFetcher = createTokenFetcher(properties);
