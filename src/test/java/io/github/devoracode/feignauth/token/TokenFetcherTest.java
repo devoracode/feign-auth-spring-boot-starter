@@ -87,6 +87,33 @@ class TokenFetcherTest {
 	}
 
 	@Test
+	void customStoreBusinessExceptionIsPassedThroughUnwrapped() {
+		FeignAuthProperties properties = new FeignAuthProperties();
+		properties.setServices(services(oauth2Service(client("c1"))));
+		TokenStore tokenStore = mock(TokenStore.class);
+		FeignAuthTokenException original = new FeignAuthTokenException("token revoked by admin");
+		when(tokenStore.remove("svc:c1")).thenThrow(original);
+		TokenFetcher tokenFetcher = createTokenFetcher(properties, tokenStore);
+
+		// 使用方自建 TokenStore 主动抛出的业务异常不该被包装成「驱逐失败」
+		assertThatThrownBy(() -> tokenFetcher.invalidateToken("svc", "/api/x")).isSameAs(original);
+	}
+
+	@Test
+	void resolveClientCollapsesRepeatedSlashes() {
+		FeignAuthProperties properties = new FeignAuthProperties();
+		TokenFetcher tokenFetcher = createTokenFetcher(properties);
+		FeignAuthProperties.Service service = oauth2Service(
+				client("event", "/api/measure"),
+				client("telemetry", "/api/measure/telemetry"),
+				client("default"));
+
+		// 直接调用方（以及 base-url 中间带 // 的场景）传入的路径也要先折叠再匹配
+		assertThat(tokenFetcher.resolveClient("measure", service, "/api//measure/telemetry/1").getId())
+				.isEqualTo("telemetry");
+	}
+
+	@Test
 	void productiveEvictionStartsTheCooldownWindow() {
 		FeignAuthProperties properties = new FeignAuthProperties();
 		properties.setServices(services(oauth2Service(client("c1"))));

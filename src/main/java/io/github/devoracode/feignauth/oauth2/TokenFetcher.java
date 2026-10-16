@@ -124,6 +124,11 @@ public class TokenFetcher {
 		try {
 			return this.tokenStore.remove(cacheKey);
 		}
+		// 使用方自建 TokenStore 主动抛出的业务异常原样透传，避免被下面二次包装成「驱逐失败」
+		// （与 RedisLockProvider 对 FeignAuthTokenException 的处理保持一致）
+		catch (FeignAuthTokenException ex) {
+			throw ex;
+		}
 		// 按 RuntimeException 收敛而不是 DataAccessException：TokenStore 并不绑定 Redis，
 		// 本地实现与使用方自建实现抛出的异常类型各不相同
 		catch (RuntimeException ex) {
