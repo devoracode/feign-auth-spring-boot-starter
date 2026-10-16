@@ -1,5 +1,6 @@
 package io.github.devoracode.feignauth.feign;
 
+import ch.qos.logback.classic.Level;
 import feign.RequestTemplate;
 import feign.Target;
 import io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties;
@@ -200,6 +201,27 @@ class FeignAuthRequestInterceptorTest {
 		assertThat(template.headers().get("Authorization")).containsExactly("sk-test");
 	}
 
+	@Test
+	void noMatchWarningIsLoggedOncePerBaseUrlAndLaterOccurrenceDropsToDebug() {
+		FeignAuthProperties properties = new FeignAuthProperties();
+		properties.getAuth().setFailOnNoMatch(false);
+		FeignAuthRequestInterceptor interceptor = new FeignAuthRequestInterceptor(
+			new ServiceMatcher(properties), null, new HeaderManager(), properties);
+
+		LogCaptures warnings = LogCaptures.attach(FeignAuthRequestInterceptor.class);
+		try {
+			interceptor.apply(template("https://unknown.example.com", "/api/data"));
+			interceptor.apply(template("https://unknown.example.com", "/api/other"));
+			interceptor.apply(template("https://another.example.com", "/api/data"));
+		} finally {
+			warnings.detach();
+		}
+
+		// 未匹配请求每个都会走到这里，同一 baseUrl 只提醒一次；换个 baseUrl 仍是新的一次提醒
+		assertThat(warnings.count(Level.WARN)).isEqualTo(2);
+		assertThat(warnings.count(Level.DEBUG)).isEqualTo(1);
+	}
+		
 	private static FeignAuthRequestInterceptor interceptorWith(FeignAuthProperties.Service service,
 			TokenFetcher tokenFetcher) {
 		FeignAuthProperties properties = new FeignAuthProperties();

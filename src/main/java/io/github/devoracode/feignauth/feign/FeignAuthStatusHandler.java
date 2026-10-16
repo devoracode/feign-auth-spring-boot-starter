@@ -38,6 +38,9 @@ final class FeignAuthStatusHandler {
 
 	private final ObjectMapper objectMapper;
 
+	// URL 解析失败通常来自同一个客户端方法，每次重试都提醒一次毫无增量信息，同一 URL 只提醒一次
+	private final WarnThrottle urlParseWarnings = new WarnThrottle();
+
 	FeignAuthStatusHandler(ServiceMatcher serviceMatcher, TokenFetcher tokenFetcher, ObjectMapper objectMapper) {
 		Assert.notNull(serviceMatcher, "serviceMatcher must not be null");
 		Assert.notNull(tokenFetcher, "tokenFetcher must not be null");
@@ -63,7 +66,7 @@ final class FeignAuthStatusHandler {
 		}
 
 		int status = response.status();
-		ResolvedRequest request = ResolvedRequest.from(response.request());
+		ResolvedRequest request = ResolvedRequest.from(response.request(), this.urlParseWarnings);
 		ResolvedService resolved = (request != null)
 				? this.serviceMatcher.match(request.getBaseUrl(), request.getRequestPath()) : null;
 
@@ -258,7 +261,7 @@ final class FeignAuthStatusHandler {
 			return this.requestPath;
 		}
 
-		static ResolvedRequest from(Request request) {
+		static ResolvedRequest from(Request request, WarnThrottle warnings) {
 			if (request == null || StringUtils.isBlank(request.url())) {
 				return null;
 			}
@@ -272,8 +275,12 @@ final class FeignAuthStatusHandler {
 				// 最终 URL 无法解析（如路径里含未编码的空格/非 ASCII 字面量）时，不能把一次正常的 4xx
 				// 变成解析异常：返回 null 走「未匹配服务」分支，仍会抛出 FeignAuthTokenException，
 				// 只是不做令牌驱逐与重放
-				if (logger.isWarnEnabled()) {
+				if (warnings.shouldWarn(request.url())) {
 					logger.warn("FeignAuth: cannot parse request url '" + request.url()
+							+ "' for expired-token check: " + ex.getMessage()
+							+ "; this warning is logged once per url, later occurrences are logged at debug level");
+				} else if (logger.isDebugEnabled()) {
+					logger.debug("FeignAuth: cannot parse request url '" + request.url()
 							+ "' for expired-token check: " + ex.getMessage());
 				}
 				return null;

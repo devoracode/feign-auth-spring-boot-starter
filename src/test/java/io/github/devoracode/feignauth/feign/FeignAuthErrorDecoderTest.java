@@ -1,5 +1,6 @@
 package io.github.devoracode.feignauth.feign;
 
+import ch.qos.logback.classic.Level;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import feign.Request;
 import feign.RequestTemplate;
@@ -112,6 +113,31 @@ class FeignAuthErrorDecoderTest {
 		// 修复前这里抛的是 URI.create 的 IllegalArgumentException
 		assertThat(exception).isInstanceOf(FeignAuthTokenException.class);
 		assertThat(exception instanceof RetryableException).isFalse();
+	}
+
+	@Test
+	void unparsableRequestUrlWarnsOnceThenDropsToDebug() {
+		FeignAuthProperties properties = new FeignAuthProperties();
+		properties.setServices(new LinkedHashMap<>());
+		properties.getServices().put("measure", oauth2Service("https://api.service-a.com",
+				client("telemetry", "/api/measure"), client("default")));
+
+		CountingTokenRequestClient tokenRequestClient = new CountingTokenRequestClient();
+		TokenFetcher tokenFetcher = new TokenFetcher(properties, new OAuth2ClientMatcher(), tokenRequestClient,
+				new LocalTokenStore(), new LocalLockProvider());
+		FeignAuthErrorDecoder decoder = new FeignAuthErrorDecoder(new ServiceMatcher(properties), tokenFetcher, objectMapper);
+
+		LogCaptures warnings = LogCaptures.attach(FeignAuthStatusHandler.class);
+		try {
+			decoder.decode("MeasureClient#getReading", response(401, "https://api.service-a.com/api/bad url/1"));
+			decoder.decode("MeasureClient#getReading", response(401, "https://api.service-a.com/api/bad url/1"));
+		} finally {
+			warnings.detach();
+		}
+
+		// 同一个无法解析的 URL 每次重试都会走到这里，只提醒一次；异常行为不受影响
+		assertThat(warnings.count(Level.WARN)).isEqualTo(1);
+		assertThat(warnings.count(Level.DEBUG)).isEqualTo(1);
 	}
 
 	@Test

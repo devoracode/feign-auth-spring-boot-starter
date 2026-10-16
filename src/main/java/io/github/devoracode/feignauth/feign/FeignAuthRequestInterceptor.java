@@ -36,6 +36,9 @@ public class FeignAuthRequestInterceptor implements RequestInterceptor {
 
     private final FeignAuthProperties properties;
 
+    // 未匹配到服务时每个请求都会走到这里（fail-on-no-match=false 是使用方的显式选择），同一 baseUrl 只提醒一次
+    private final WarnThrottle noMatchWarnings = new WarnThrottle();
+
     public FeignAuthRequestInterceptor(ServiceMatcher serviceMatcher, TokenFetcher tokenFetcher,
                                        HeaderManager headerManager, FeignAuthProperties properties) {
         Assert.notNull(serviceMatcher, "serviceMatcher must not be null");
@@ -84,8 +87,12 @@ public class FeignAuthRequestInterceptor implements RequestInterceptor {
                         + " treated as an outer prefix for path matching)"
                         + "; set feign.auth.fail-on-no-match=false to send unmatched requests without auth headers");
             }
-            if (logger.isWarnEnabled()) {
+            if (this.noMatchWarnings.shouldWarn(baseUrl)) {
                 logger.warn("FeignAuth: no service config matched for baseUrl=" + baseUrl + ", path=" + requestPath
+                    + " — request will be sent without auth header; this warning is logged once per baseUrl,"
+                    + " later occurrences are logged at debug level");
+            } else if (logger.isDebugEnabled()) {
+                logger.debug("FeignAuth: no service config matched for baseUrl=" + baseUrl + ", path=" + requestPath
                     + " — request will be sent without auth header");
             }
             return;
