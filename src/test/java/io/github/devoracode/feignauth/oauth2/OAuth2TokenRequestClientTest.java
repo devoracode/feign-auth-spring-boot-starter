@@ -296,6 +296,43 @@ class OAuth2TokenRequestClientTest {
 		return new String(chars);
 	}
 
+	@Test
+	void zeroSocketTimeoutIsRejectedInsteadOfWaitingForever() {
+		// RequestConfig 语义：0 = 无限等待
+		FeignAuthProperties.Http http = new FeignAuthProperties.Http();
+		http.setSocketTimeout(Duration.ZERO);
+
+		assertThatThrownBy(() -> createClient(http)).isInstanceOf(FeignAuthConfigurationException.class)
+				.hasMessageContaining("feign.auth.http.socket-timeout");
+	}
+
+	@Test
+	void negativeTimeoutIsRejectedInsteadOfClampedToZero() {
+		FeignAuthProperties.Http http = new FeignAuthProperties.Http();
+		http.setConnectTimeout(Duration.ofSeconds(-1));
+
+		assertThatThrownBy(() -> createClient(http)).isInstanceOf(FeignAuthConfigurationException.class)
+				.hasMessageContaining("feign.auth.http.connect-timeout");
+	}
+
+	@Test
+	void subMillisecondTimeoutIsRejectedBecauseItRoundsToZero() {
+		FeignAuthProperties.Http http = new FeignAuthProperties.Http();
+		http.setConnectionRequestTimeout(Duration.ofNanos(500_000));
+
+		assertThatThrownBy(() -> createClient(http)).isInstanceOf(FeignAuthConfigurationException.class)
+				.hasMessageContaining("feign.auth.http.connection-request-timeout");
+	}
+
+	@Test
+	void nullTimeoutIsRejectedWithItsKey() {
+		FeignAuthProperties.Http http = new FeignAuthProperties.Http();
+		http.setSocketTimeout(null);
+
+		assertThatThrownBy(() -> createClient(http)).isInstanceOf(FeignAuthConfigurationException.class)
+				.hasMessageContaining("feign.auth.http.socket-timeout");
+	}
+
 	private OAuth2TokenRequestClient createClient(FeignAuthProperties.Http http) {
 		OAuth2TokenResponseParser parser = new OAuth2TokenResponseParser(new ObjectMapper());
 		return new OAuth2TokenRequestClient(parser, new HeaderManager(), new ObjectMapper(), http);

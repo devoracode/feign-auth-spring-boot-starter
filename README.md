@@ -162,6 +162,8 @@ feign:
       default-max-per-route: 50           # 每个路由最大连接数
 ```
 
+三个超时都必须**严格大于 0**（且不足 1 毫秒的值也算非法）：Apache HttpClient 把 0 毫秒解释为"无限等待"，starter 不做静默钳制，启动阶段即抛 `FeignAuthConfigurationException` 并在信息里点名具体配置键。不支持"不限时"——取号请求悬死会拖住整个业务请求线程。
+
 该客户端注册为 Spring 容器管理的 Bean，应用上下文关闭时自动 `close()` 释放连接池与空闲连接驱逐线程。如需替换实现（例如换用其他 HTTP 客户端），直接声明自己的 `OAuth2TokenRequestClient` Bean 即可，starter 默认实现会自动让位并被默认 `TokenFetcher` 采用。
 
 **响应体读取上限 64 KiB**（硬编码）：只按实际读到的字节累积，**不依据响应声明的 `Content-Length` 预分配**，因此超大错误页（如 HTML 版 502）或被伪装的超长长度头都无法把堆占用推高到该值以上；读满上限即停止读取。非 2xx 响应会截断后照常交给解析器，异常信息里仍给出正文头部片段；2xx 却超出上限的直接抛 `FeignAuthTokenException`（`Token response exceeds 65536 bytes`），因为残缺的 JSON 不可能是合法令牌响应。正常 `client_credentials` 响应远小于该值（通常仅数百字节到 2 KiB 量级，含大 JWT 的极端声明也在十几 KiB 内），若你的 IdP 会在令牌响应里携带大量自定义 claim，请留意这一上限。

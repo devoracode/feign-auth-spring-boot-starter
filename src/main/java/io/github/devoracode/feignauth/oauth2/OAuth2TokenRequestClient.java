@@ -269,9 +269,10 @@ public class OAuth2TokenRequestClient implements AutoCloseable {
 		connectionManager.setDefaultMaxPerRoute(http.getDefaultMaxPerRoute());
 
 		RequestConfig requestConfig = RequestConfig.custom()
-				.setConnectTimeout(toMillis(http.getConnectTimeout()))
-				.setConnectionRequestTimeout(toMillis(http.getConnectionRequestTimeout()))
-				.setSocketTimeout(toMillis(http.getSocketTimeout()))
+				.setConnectTimeout(toMillis(http.getConnectTimeout(), "feign.auth.http.connect-timeout"))
+				.setConnectionRequestTimeout(
+						toMillis(http.getConnectionRequestTimeout(), "feign.auth.http.connection-request-timeout"))
+				.setSocketTimeout(toMillis(http.getSocketTimeout(), "feign.auth.http.socket-timeout"))
 				.build();
 
 		return HttpClientBuilder.create()
@@ -284,9 +285,14 @@ public class OAuth2TokenRequestClient implements AutoCloseable {
 				.build();
 	}
 
-	private static int toMillis(Duration timeout) {
+	// RequestConfig 把 0 当无限等待，因此不足 1 毫秒的正值也必须拒绝：它会四舍五入成 0
+	private static int toMillis(Duration timeout, String key) {
+		if (timeout == null || timeout.toMillis() <= 0L) {
+			throw new FeignAuthConfigurationException("FeignAuth: invalid configuration " + key + "=" + timeout
+					+ ", must be a positive duration (0 means infinite wait)");
+		}
 		// 超过 int 上限的超大时长截断为 Integer.MAX_VALUE（HttpClient 参数为 int 毫秒）
-		return (int) Math.min(Math.max(timeout.toMillis(), 0L), Integer.MAX_VALUE);
+		return (int) Math.min(timeout.toMillis(), Integer.MAX_VALUE);
 	}
 
 	private static Map<String, String> buildTokenRequestParameters(FeignAuthProperties.Auth auth,
