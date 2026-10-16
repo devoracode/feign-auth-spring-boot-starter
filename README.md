@@ -200,7 +200,7 @@ feign:
 4. OAuth2 服务内部：先按 Client 的 `path-prefixes` 匹配，无命中时使用默认 Client（无 `path-prefixes` 的 Client）
 5. 路径命中长度相同时，抛出配置冲突异常，需消除歧义
 
-**请求路径口径：** 参与匹配的请求路径统一由 `PathUtils.normalizeRequestPath` 归一化——补全开头的 `/`、去掉查询串与 `#` 片段、折叠连续斜杠（`//` → `/`）、去掉末尾斜杠（根路径 `/` 保留）。鉴权头注入与过期令牌驱逐两侧都走这一口径，因此 `base-url: https://api.x.com/api//` 这类写法或 `{}` 变量展开出的多余斜杠，不会出现「头注入了 A Client 的令牌、驱逐时却去找另一个 Client」的错配。
+**请求路径口径：** 参与匹配的请求路径统一由 `PathUtils.normalizeRequestPath` 归一化——补全开头的 `/`、去掉查询串与 `#` 片段、折叠连续斜杠（`//` → `/`）、去掉末尾斜杠（根路径 `/` 保留）。鉴权头注入、过期令牌驱逐、Client 的 `path-prefixes` 匹配，以及配置 `base-url` 中作为外层前缀的那段路径，都走这一口径，因此 `base-url: https://api.x.com/api//`、`https://api.x.com/api//v1` 这类写法或 `{}` 变量展开出的多余斜杠，不会出现「头注入了 A Client 的令牌、驱逐时却去找另一个 Client」的错配。**例外：** `auth.path-prefixes` 与 `clients[].path-prefixes` 里的前缀本身仍按 `normalizePath` 处理（**不**折叠 `//`），把前缀写成 `/api//measure` 匹配不上已折叠的请求路径。
 
 > **已知边界：** 若使用方自己的 `RequestInterceptor` 在本 starter 之前改写了 `template.target(...)`（把请求指向别的 host 或前缀），归一化只能消除斜杠差异，无法消除「改写」差异——这类请求仍表现为「不驱逐、不重放」。
 
@@ -220,6 +220,8 @@ feign:
   auth:
     fail-on-no-match: false   # 默认 true
 ```
+
+放行时记录的是 WARN，但**每个 baseUrl 只记录一次**（后续同一 baseUrl 的匹配失败降级为 DEBUG）：未匹配的请求会随每次调用重复触发，逐条记录只会淹没业务日志。
 
 ### auth 配置非法时的处置
 
@@ -481,6 +483,8 @@ feign:
 | `local` | ConcurrentHashMap + 懒清理 | 单实例部署 |
 | `redis` | Redis + TTL | 多实例部署，共享 Token |
 
+> `feign.auth.cache.provider` 只接受 `local` 与 `redis`（**不区分大小写**，与 Spring `@ConditionalOnProperty` 的匹配口径一致）；拼错或配成空值时启动即抛 `FeignAuthConfigurationException` 并给出实际值。否则两组 Bean 的装配条件都不成立，报错只会指向「没有 RedisConnectionFactory」这一与根因无关的方向。
+
 **本地缓存特点**：
 - 使用 `ConcurrentHashMap` 存储，线程安全
 - 访问过期 Token 时自动清理（懒清理策略）
@@ -490,7 +494,7 @@ feign:
 - 利用 Redis TTL 自动过期机制
 - 多实例共享 Token，避免重复获取
 - Spring Data Redis 已随 starter 传递引入，无需单独声明依赖；使用方只需配置 Redis 连接（`spring.redis.*` 等）使容器中存在 `RedisConnectionFactory`
-- 容器内**没有** `RedisConnectionFactory` 时（依赖被排除、`RedisAutoConfiguration` 被 exclude 等），启动即抛 `FeignAuthConfigurationException` 并在信息里点名 `feign.auth.cache.provider=redis` 与修复方式，不再是一句看不出根因的 `NoSuchBeanDefinitionException: TokenStore`。若使用方同时自备 `TokenStore` 与 `LockProvider`，Redis 连接是否存在都不受影响；只自备其一时，另一侧仍按上述规则快速失败
+- 容器内**没有** `RedisConnectionFactory` 时（依赖被排除、`RedisAutoConfiguration` 被 exclude 等），启动即抛 `FeignAuthConfigurationException` 并在信息里点名 `feign.auth.cache.provider=redis` 与两种修法（补 Redis 配置或改回 `local`），不再是一句看不出根因的 `NoSuchBeanDefinitionException: TokenStore`。若使用方同时自备 `TokenStore` 与 `LockProvider`，Redis 连接是否存在都不受影响；只自备其一时，另一侧仍按上述规则快速失败。使用方自备 `TokenFetcher` 时本节的两条校验都不参与——此时 starter 的缓存装配整体让位，容器里没有任何组件消费 `TokenStore` / `LockProvider`
 - 存储格式：键为纯 String（见上方 Key 格式表），值为**固定类型的 JSON**（只含 `accessToken` / `ttl` / `expireAt` 三个字段，不带任何类型元数据），由 starter 自建的 `RedisTemplate`（`StringRedisSerializer` 键 + 令牌专用 JSON 序列化器值）读写，不借用容器中已有的 `RedisTemplate` / `StringRedisTemplate` 及其序列化器，因此使用方或其他组件的序列化配置不会破坏令牌读写
 - 令牌条目不写 `@class` 之类的类型信息，读取时也**不以值里的类名决定实例化哪个类**：即使 Redis 被第三方写入（共享实例、弱口令、与其他业务共库等），恶意载荷也只会被拒绝并清理，不会被实例化；早期版本写入的带 `@class` 条目仍可正常读出，无需清缓存
 - 排障时可直接 `GET feign-auth:token:{serviceName}:{clientId}` 查看内容；读到无法反序列化的值（旧格式残留、人为改写等）会 WARN 后删除，并在下次取号时按当前格式重建。注意该 JSON 内含令牌明文，Redis 实例需按敏感数据要求做访问控制与持久化策略
