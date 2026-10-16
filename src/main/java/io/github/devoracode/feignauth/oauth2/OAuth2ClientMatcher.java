@@ -28,7 +28,8 @@ public class OAuth2ClientMatcher {
 			throw new FeignAuthConfigurationException("No OAuth2 clients configured for service: " + serviceName);
 		}
 
-		String path = PathUtils.normalizePath(requestPath);
+		// 与 RequestInterceptor / ErrorDecoder 同一口径：折叠连续斜杠后再匹配 path-prefixes
+		String path = PathUtils.normalizeRequestPath(requestPath);
 		FeignAuthProperties.Client bestClient = null;
 		int bestMatchLength = 0;
 		for (FeignAuthProperties.Client client : auth.getClients()) {

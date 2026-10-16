@@ -182,9 +182,10 @@ public final class PathUtils {
 	 *
 	 * <p><b>示例：</b></p>
 	 * <pre>{@code
-	 * PathUtils.baseUrlPath("https://api.example.com/v1/")  // "/v1"
-	 * PathUtils.baseUrlPath("https://api.example.com")      // ""
-	 * PathUtils.baseUrlPath(null)                           // ""
+	 * PathUtils.baseUrlPath("https://api.example.com/v1/")      // "/v1"
+	 * PathUtils.baseUrlPath("https://api.example.com/api//v1")  // "/api/v1"
+	 * PathUtils.baseUrlPath("https://api.example.com")          // ""
+	 * PathUtils.baseUrlPath(null)                               // ""
 	 * }</pre>
 	 *
 	 * @param url 待提取的 URL
@@ -196,7 +197,9 @@ public final class PathUtils {
 		}
 		try {
 			URI uri = URI.create(url.trim());
-			return StringUtils.stripEnd(normalizePath(StringUtils.defaultString(uri.getRawPath())), "/");
+			// 与请求路径同口径折叠连续斜杠：否则 base-url 写成 https://api.x.com/api//v1 时，
+			// 配置侧路径剥不掉已归一化的请求路径，配置的路径段作为外层前缀会静默失效
+			return StringUtils.stripEnd(normalizeRequestPath(StringUtils.defaultString(uri.getRawPath())), "/");
 		} catch (IllegalArgumentException ex) {
 			return "";
 		}

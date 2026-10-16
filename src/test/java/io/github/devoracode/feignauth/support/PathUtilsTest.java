@@ -71,6 +71,8 @@ class PathUtilsTest {
 		assertThat(PathUtils.baseUrlPath("https://api.example.com/v1/")).isEqualTo("/v1");
 		assertThat(PathUtils.baseUrlPath("https://api.example.com")).isEmpty();
 		assertThat(PathUtils.baseUrlPath("https://api.example.com/v1/deep")).isEqualTo("/v1/deep");
+		// 与请求路径同口径折叠连续斜杠，否则 base-url 写成 /api//v1 时剥不掉已归一化的请求路径
+		assertThat(PathUtils.baseUrlPath("https://api.example.com/api//v1/")).isEqualTo("/api/v1");
 		assertThat(PathUtils.baseUrlPath(null)).isEmpty();
 	}
 

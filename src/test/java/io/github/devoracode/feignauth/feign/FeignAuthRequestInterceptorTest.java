@@ -181,6 +181,25 @@ class FeignAuthRequestInterceptorTest {
 		assertThat(template.headers().get("Authorization")).containsExactly("sk-test");
 	}
 
+	@Test
+	void apiKeyHeaderAppliedWhenBaseUrlCarriesRepeatedSlashes() {
+		FeignAuthProperties.Service service = service("api-key", auth -> {
+			auth.setHeaderName("Authorization");
+			auth.setValue("sk-test");
+			auth.setPathPrefixes(Collections.singletonList("/orders"));
+		});
+		// base-url 中间带 // 时，配置侧路径也要折叠后才剥得掉外层前缀，
+		// 否则匹配不到服务，会按 fail-on-no-match 直接抛配置异常
+		service.setBaseUrl("https://api.example.com/api//v1");
+
+		RequestTemplate template = template("https://api.example.com/api//v1", "/orders/1");
+		FeignAuthRequestInterceptor interceptor = interceptorWith(service, null);
+
+		interceptor.apply(template);
+
+		assertThat(template.headers().get("Authorization")).containsExactly("sk-test");
+	}
+
 	private static FeignAuthRequestInterceptor interceptorWith(FeignAuthProperties.Service service,
 			TokenFetcher tokenFetcher) {
 		FeignAuthProperties properties = new FeignAuthProperties();
