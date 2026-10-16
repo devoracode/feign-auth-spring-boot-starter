@@ -8,6 +8,7 @@ import io.github.devoracode.feignauth.header.HeaderManager;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.http.HttpEntity;
 import org.apache.http.NameValuePair;
+import org.apache.http.ParseException;
 import org.apache.http.client.entity.UrlEncodedFormEntity;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.CloseableHttpResponse;
@@ -141,7 +142,8 @@ public class OAuth2TokenRequestClient implements AutoCloseable {
 		try {
 			contentType = ContentType.parse(configured);
 		}
-		catch (IllegalArgumentException ex) {
+		// ParseException 也是 RuntimeException：`;`、`,` 这类被拆成空元素的值只抛它，不一起接住就绕过下面的快速失败
+		catch (IllegalArgumentException | ParseException ex) {
 			contentType = null;
 		}
 		if (contentType == null) {

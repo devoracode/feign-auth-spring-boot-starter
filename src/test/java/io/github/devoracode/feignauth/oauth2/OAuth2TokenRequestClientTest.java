@@ -110,6 +110,21 @@ class OAuth2TokenRequestClientTest {
 	}
 
 	@Test
+	void malformedTokenRequestContentTypeFailsFastAsConfigurationException() {
+		// 这些值会被 BasicHeaderValueParser 拆成空元素，ContentType.parse 抛 ParseException
+		// （RuntimeException，不是 IllegalArgumentException），旧代码的 catch 兜不住
+		for (String configured : new String[] { ";", ",", ";;", " , " }) {
+			FeignAuthProperties.Service service = service(this.tokenUrl);
+			service.getAuth().getTokenRequestHeaders().put("Content-Type", configured);
+			OAuth2TokenRequestClient client = createClient(new FeignAuthProperties.Http());
+
+			assertThatThrownBy(() -> client.requestToken("svc", service, clientCredentials()))
+					.isInstanceOf(FeignAuthConfigurationException.class)
+					.hasMessageContaining("Invalid Content-Type");
+		}
+	}
+
+	@Test
 	void responseDecodedWithDeclaredCharset() {
 		this.server.createContext("/token", exchange -> {
 			try {
