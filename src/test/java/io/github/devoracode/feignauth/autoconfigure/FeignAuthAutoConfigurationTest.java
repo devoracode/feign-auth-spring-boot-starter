@@ -1,6 +1,7 @@
 package io.github.devoracode.feignauth.autoconfigure;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.github.devoracode.feignauth.exception.FeignAuthConfigurationException;
 import io.github.devoracode.feignauth.header.HeaderManager;
 import io.github.devoracode.feignauth.oauth2.OAuth2TokenRequestClient;
 import io.github.devoracode.feignauth.oauth2.OAuth2TokenResponseParser;
@@ -78,6 +79,29 @@ class FeignAuthAutoConfigurationTest {
 			assertThat(context).hasFailed();
 			assertThat(context.getStartupFailure()).hasStackTraceContaining("feign.auth.http.socket-timeout");
 		});
+	}
+
+	@Test
+	void redisProviderWithoutConnectionFactoryNamesTheRootCause() {
+		// provider=redis 却没有 RedisConnectionFactory 时，两个 redis Bean 的条件都不成立，
+		// 使用方只能看到「TokenStore 注入不上」这条与根因无关的 NoSuchBeanDefinitionException
+		this.runner.withPropertyValues("feign.auth.cache.provider=redis").run(context -> {
+			assertThat(context).hasFailed();
+			assertThat(context.getStartupFailure()).hasStackTraceContaining("feign.auth.cache.provider=redis")
+					.hasStackTraceContaining("RedisConnectionFactory")
+					.hasStackTraceContaining(FeignAuthConfigurationException.class.getName());
+		});
+	}
+
+	@Test
+	void redisProviderKeepsUserDefinedTokenStoreWhenNoConnectionFactoryExists() {
+		// 使用方自备 TokenStore + LockProvider 时不该被快速失败拦截，哪怕容器里没有 Redis 连接
+		this.runner.withPropertyValues("feign.auth.cache.provider=redis")
+				.withBean(io.github.devoracode.feignauth.oauth2.store.TokenStore.class,
+						io.github.devoracode.feignauth.oauth2.store.LocalTokenStore::new)
+				.withBean(io.github.devoracode.feignauth.oauth2.lock.LockProvider.class,
+						io.github.devoracode.feignauth.oauth2.lock.LocalLockProvider::new)
+				.run(context -> assertThat(context).hasNotFailed());
 	}
 
 	private static FeignAuthProperties.Service oauth2Service() {

@@ -2,6 +2,7 @@ package io.github.devoracode.feignauth.autoconfigure;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import feign.RequestInterceptor;
+import io.github.devoracode.feignauth.exception.FeignAuthConfigurationException;
 import io.github.devoracode.feignauth.feign.ServiceMatcher;
 import io.github.devoracode.feignauth.header.HeaderCustomizer;
 import io.github.devoracode.feignauth.header.HeaderManager;
@@ -106,6 +107,30 @@ public class FeignAuthAutoConfiguration {
         // 自建 StringRedisTemplate：不依赖容器里是否存在同名/同类型 Bean
         return new RedisLockProvider(new StringRedisTemplate(redisConnectionFactory),
             properties.getAuth().getCache().getRedis());
+    }
+
+    // provider=redis 却没有任何 Redis 连接（未引入 spring-data-redis、排除了 RedisAutoConfiguration 等）时，
+    // 上面两个 redis Bean 的 @ConditionalOnBean 都不成立，启动报错只剩「TokenFetcher 参数注入不上」这种
+    // 与根因无关的 NoSuchBeanDefinitionException。以下两个 Bean 专门补一条点名根因的快速失败，
+    // 因此必须声明在真正的 redis Bean 之后（@ConditionalOnMissingBean 只看已注册的定义）
+    @Bean
+    @ConditionalOnMissingBean(TokenStore.class)
+    @ConditionalOnProperty(prefix = "feign.auth.cache", name = "provider", havingValue = "redis")
+    public TokenStore redisTokenStoreUnavailable() {
+        throw new FeignAuthConfigurationException(redisCacheNotAvailable());
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(LockProvider.class)
+    @ConditionalOnProperty(prefix = "feign.auth.cache", name = "provider", havingValue = "redis")
+    public LockProvider redisLockProviderUnavailable() {
+        throw new FeignAuthConfigurationException(redisCacheNotAvailable());
+    }
+
+    private static String redisCacheNotAvailable() {
+        return "FeignAuth: feign.auth.cache.provider=redis but no RedisConnectionFactory is available in the"
+            + " context; add spring-boot-starter-data-redis and configure spring.redis.*, or set"
+            + " feign.auth.cache.provider=local for the in-memory cache";
     }
 
     @Configuration(proxyBeanMethods = false)
