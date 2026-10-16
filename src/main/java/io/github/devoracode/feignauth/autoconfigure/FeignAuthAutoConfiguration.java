@@ -109,24 +109,6 @@ public class FeignAuthAutoConfiguration {
             properties.getAuth().getCache().getRedis());
     }
 
-    // provider=redis 却没有任何 Redis 连接（未引入 spring-data-redis、排除了 RedisAutoConfiguration 等）时，
-    // 上面两个 redis Bean 的 @ConditionalOnBean 都不成立，启动报错只剩「TokenFetcher 参数注入不上」这种
-    // 与根因无关的 NoSuchBeanDefinitionException。以下两个 Bean 专门补一条点名根因的快速失败，
-    // 因此必须声明在真正的 redis Bean 之后（@ConditionalOnMissingBean 只看已注册的定义）
-    @Bean
-    @ConditionalOnMissingBean(TokenStore.class)
-    @ConditionalOnProperty(prefix = "feign.auth.cache", name = "provider", havingValue = "redis")
-    public TokenStore redisTokenStoreUnavailable() {
-        throw new FeignAuthConfigurationException(redisCacheNotAvailable());
-    }
-
-    @Bean
-    @ConditionalOnMissingBean(LockProvider.class)
-    @ConditionalOnProperty(prefix = "feign.auth.cache", name = "provider", havingValue = "redis")
-    public LockProvider redisLockProviderUnavailable() {
-        throw new FeignAuthConfigurationException(redisCacheNotAvailable());
-    }
-
     private static String redisCacheNotAvailable() {
         return "FeignAuth: feign.auth.cache.provider=redis but no RedisConnectionFactory is available in the"
             + " context; add spring-boot-starter-data-redis and configure spring.redis.*, or set"
@@ -146,10 +128,26 @@ public class FeignAuthAutoConfiguration {
                 objectMapper, properties.getAuth().getHttp());
         }
 
+        // TokenStore / LockProvider 用 ObjectProvider 取而不是按类型注入：provider=redis 而容器里没有 Redis
+        // 连接（未引入 spring-data-redis、排除了 RedisAutoConfiguration 等）时，上面两个 redis Bean 的
+        // @ConditionalOnBean 都不成立，按类型注入只会得到「TokenFetcher 参数注入不上」这种与根因无关的
+        // NoSuchBeanDefinitionException；这里补一条点名根因的快速失败。
+        //
+        // 这条判断必须放在本配置类内（而不是外层类的 @Bean 哨兵）：@Bean 方法的条件在注册期按顺序求值，
+        // 而嵌套配置类的 Bean 定义先于外层类注册（Spring 先递归处理成员类），外层哨兵因此无法区分
+        // 「使用方自备 TokenFetcher」与「本 starter 自己注册的 TokenFetcher」。本配置类带
+        // @ConditionalOnMissingBean(TokenFetcher.class)，使用方自备 TokenFetcher 时整体让位，
+        // 天然不会再触发这条快速失败。
         @Bean
         TokenFetcher tokenFetcher(FeignAuthProperties properties, OAuth2ClientMatcher clientMatcher,
-                                  HeaderManager headerManager, TokenStore tokenStore, LockProvider lockProvider,
+                                  HeaderManager headerManager, ObjectProvider<TokenStore> tokenStoreProvider,
+                                  ObjectProvider<LockProvider> lockProviderProvider,
                                   OAuth2TokenRequestClient tokenRequestClient) {
+            TokenStore tokenStore = tokenStoreProvider.getIfAvailable();
+            LockProvider lockProvider = lockProviderProvider.getIfAvailable();
+            if (tokenStore == null || lockProvider == null) {
+                throw new FeignAuthConfigurationException(redisCacheNotAvailable());
+            }
             return new TokenFetcher(properties, clientMatcher, tokenRequestClient, tokenStore, lockProvider);
         }
 

@@ -5,6 +5,7 @@ import io.github.devoracode.feignauth.exception.FeignAuthConfigurationException;
 import io.github.devoracode.feignauth.header.HeaderManager;
 import io.github.devoracode.feignauth.oauth2.OAuth2TokenRequestClient;
 import io.github.devoracode.feignauth.oauth2.OAuth2TokenResponseParser;
+import io.github.devoracode.feignauth.oauth2.TokenFetcher;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
@@ -12,6 +13,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
 
 class FeignAuthAutoConfigurationTest {
 
@@ -101,6 +103,15 @@ class FeignAuthAutoConfigurationTest {
 						io.github.devoracode.feignauth.oauth2.store.LocalTokenStore::new)
 				.withBean(io.github.devoracode.feignauth.oauth2.lock.LockProvider.class,
 						io.github.devoracode.feignauth.oauth2.lock.LocalLockProvider::new)
+				.run(context -> assertThat(context).hasNotFailed());
+	}
+
+	@Test
+	void userDefinedTokenFetcherIsNotBlockedByMissingRedisConnection() {
+		// 使用方自备 TokenFetcher 时 starter 的 TokenFetcherConfiguration 整体让位，容器里没有任何组件
+		// 消费 TokenStore / LockProvider，此时不该因为 provider=redis 且没有 Redis 连接而启动失败
+		this.runner.withPropertyValues("feign.auth.cache.provider=redis")
+				.withBean(TokenFetcher.class, () -> mock(TokenFetcher.class))
 				.run(context -> assertThat(context).hasNotFailed());
 	}
 
