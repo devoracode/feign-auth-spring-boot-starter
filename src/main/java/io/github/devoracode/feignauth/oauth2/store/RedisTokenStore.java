@@ -92,6 +92,7 @@ public class RedisTokenStore implements TokenStore {
 
     @Override
     public boolean remove(String key) {
-        return redisTemplate.delete(keyPrefix + TOKEN_SUFFIX + key);
+        // 与 RedisLockProvider 一致的兜底：模板由使用方注入，Boolean 结果可能为 null，拆箱前挡掉
+        return Boolean.TRUE.equals(redisTemplate.delete(keyPrefix + TOKEN_SUFFIX + key));
     }
 }

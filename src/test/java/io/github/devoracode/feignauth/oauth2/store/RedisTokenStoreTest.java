@@ -163,6 +163,26 @@ class RedisTokenStoreTest {
 		assertThat(store.get("svc:client")).isSameAs(token);
 	}
 
+	@Test
+	void removeReportsNotRemovedWhenTemplateGivesNullResult() {
+		RedisTemplate<String, Object> redisTemplate = mock(RedisTemplate.class);
+		when(redisTemplate.delete("feign-auth:token:svc:client")).thenReturn(null);
+
+		RedisTokenStore store = new RedisTokenStore(redisTemplate, new FeignAuthProperties.Redis());
+
+		assertThat(store.remove("svc:client")).isFalse();
+	}
+
+	@Test
+	void removeReportsRemovedWhenTemplateGivesTrue() {
+		RedisTemplate<String, Object> redisTemplate = mock(RedisTemplate.class);
+		when(redisTemplate.delete("feign-auth:token:svc:client")).thenReturn(Boolean.TRUE);
+
+		RedisTokenStore store = new RedisTokenStore(redisTemplate, new FeignAuthProperties.Redis());
+
+		assertThat(store.remove("svc:client")).isTrue();
+	}
+
 	@SuppressWarnings("unchecked")
 	private static RedisTemplate<String, Object> mockTemplateWithValues() {
 		RedisTemplate<String, Object> redisTemplate = mock(RedisTemplate.class);
