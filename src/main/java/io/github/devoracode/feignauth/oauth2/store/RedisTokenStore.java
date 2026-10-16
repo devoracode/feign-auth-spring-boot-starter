@@ -6,7 +6,6 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.SerializationException;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 
@@ -15,7 +14,7 @@ import java.util.concurrent.TimeUnit;
 /**
  * 基于 Redis 的令牌缓存。
  *
- * <p>自带序列化的内部 {@link RedisTemplate}（String 键 + 类型化 JSON 值），
+ * <p>自带序列化的内部 {@link RedisTemplate}（String 键 + 固定类型 JSON 值），
  * 只依赖容器中的 {@link RedisConnectionFactory}，不要求使用方提供特定泛型/序列化器的
  * RedisTemplate Bean，避免泛型不兼容导致的启动失败与外部序列化器破坏读写。
  */
@@ -42,7 +41,7 @@ public class RedisTokenStore implements TokenStore {
         RedisTemplate<String, Object> template = new RedisTemplate<>();
         template.setConnectionFactory(connectionFactory);
         StringRedisSerializer keySerializer = new StringRedisSerializer();
-        GenericJackson2JsonRedisSerializer valueSerializer = new GenericJackson2JsonRedisSerializer();
+        OAuth2AccessTokenRedisSerializer valueSerializer = new OAuth2AccessTokenRedisSerializer();
         template.setKeySerializer(keySerializer);
         template.setHashKeySerializer(keySerializer);
         template.setValueSerializer(valueSerializer);

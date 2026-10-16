@@ -480,7 +480,8 @@ feign:
 - 利用 Redis TTL 自动过期机制
 - 多实例共享 Token，避免重复获取
 - Spring Data Redis 已随 starter 传递引入，无需单独声明依赖；使用方只需配置 Redis 连接（`spring.redis.*` 等）使容器中存在 `RedisConnectionFactory`
-- 存储格式：键为纯 String（见上方 Key 格式表），值为**带类型信息（`@class`）的 JSON**，由 starter 自建的 `RedisTemplate`（`StringRedisSerializer` 键 + `GenericJackson2JsonRedisSerializer` 值）读写，不借用容器中已有的 `RedisTemplate` / `StringRedisTemplate` 及其序列化器，因此使用方或其他组件的序列化配置不会破坏令牌读写
+- 存储格式：键为纯 String（见上方 Key 格式表），值为**固定类型的 JSON**（只含 `accessToken` / `ttl` / `expireAt` 三个字段，不带任何类型元数据），由 starter 自建的 `RedisTemplate`（`StringRedisSerializer` 键 + 令牌专用 JSON 序列化器值）读写，不借用容器中已有的 `RedisTemplate` / `StringRedisTemplate` 及其序列化器，因此使用方或其他组件的序列化配置不会破坏令牌读写
+- 令牌条目不写 `@class` 之类的类型信息，读取时也**不以值里的类名决定实例化哪个类**：即使 Redis 被第三方写入（共享实例、弱口令、与其他业务共库等），恶意载荷也只会被拒绝并清理，不会被实例化；早期版本写入的带 `@class` 条目仍可正常读出，无需清缓存
 - 排障时可直接 `GET feign-auth:token:{serviceName}:{clientId}` 查看内容；读到无法反序列化的值（旧格式残留、人为改写等）会 WARN 后删除，并在下次取号时按当前格式重建。注意该 JSON 内含令牌明文，Redis 实例需按敏感数据要求做访问控制与持久化策略
 
 ### 锁机制
