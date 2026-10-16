@@ -6,24 +6,33 @@ import io.github.devoracode.feignauth.support.PathUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.util.Assert;
 
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 /**
  * 基于基础 URL 与路径，为发出的 Feign 请求解析匹配的配置服务。
  * <p>
  * 基础 URL 按 {@code scheme://host:port} authority 归一化比较（补全默认端口、忽略大小写），
  * 配置 base-url 携带的路径段视为外层前缀：请求路径落在其下时先剥离再做前缀匹配。
+ * <p>
+ * 本类每个请求都会被调用一次，因此匹配走单趟、不分配中间集合，URL 派生值按 URL 串记忆化。
  *
  * @author Wenjie Liu
  * @since 1.0.0
  */
 public class ServiceMatcher {
 
+	/** URL 派生值缓存的条目上限：配置里的 base-url 通常只有几个，动态 target 也不该无界增长 */
+	private static final int MAX_URL_CACHE_ENTRIES = 256;
+
 	private final FeignAuthProperties properties;
+
+	// URL 串到派生值是纯函数映射（同一个字符串永远得到同一个结果），因此缓存不会因配置变更而失效
+	private final ConcurrentMap<String, String> authorityCache = new ConcurrentHashMap<>();
+
+	private final ConcurrentMap<String, String> basePathCache = new ConcurrentHashMap<>();
 
 	public ServiceMatcher(FeignAuthProperties properties) {
 		Assert.notNull(properties, "properties must not be null");
@@ -44,8 +53,16 @@ public class ServiceMatcher {
 		}
 
 		String requestAuthority = authorityKey(baseUrl);
-		List<MatchCandidate> candidates = new ArrayList<>();
-		List<String> invalidConfigs = new ArrayList<>();
+		// 单趟完成匹配：路径前缀最长的服务优先，没有任何前缀命中时才考虑 fallback。
+		// 排序与中间集合都省掉（本方法每个请求都会执行），非法配置信息按需拼接（只有要报错时才读）
+		ResolvedService bestPrefixMatch = null;
+		int bestPrefixLength = 0;
+		boolean ambiguousPrefixMatch = false;
+		ResolvedService fallbackMatch = null;
+		int fallbackCount = 0;
+		int validCandidates = 0;
+		StringBuilder invalidConfigs = null;
+
 		for (Map.Entry<String, FeignAuthProperties.Service> entry : services.entrySet()) {
 			FeignAuthProperties.Service service = entry.getValue();
 			if (service == null || !requestAuthority.equals(authorityKey(service.getBaseUrl()))) {
@@ -53,69 +70,113 @@ public class ServiceMatcher {
 			}
 			FeignAuthProperties.Auth auth = service.getAuth();
 			if (auth == null) {
-				invalidConfigs.add(entry.getKey() + " (auth config is missing, expected auth.type 'oauth2' or 'api-key')");
+				invalidConfigs = appendInvalidConfig(invalidConfigs, entry.getKey(),
+						" (auth config is missing, expected auth.type 'oauth2' or 'api-key')");
 				continue;
 			}
 			if (!auth.isApiKey() && !auth.isOAuth2()) {
-				invalidConfigs.add(entry.getKey() + " (unsupported auth.type '" + auth.getType()
-						+ "', expected 'oauth2' or 'api-key')");
+				invalidConfigs = appendInvalidConfig(invalidConfigs, entry.getKey(),
+						" (unsupported auth.type '" + auth.getType() + "', expected 'oauth2' or 'api-key')");
 				continue;
 			}
-			String matchPath = stripConfiguredBasePath(requestPath, PathUtils.baseUrlPath(service.getBaseUrl()));
-			candidates.add(new MatchCandidate(new ResolvedService(entry.getKey(), service), matchPath));
+			validCandidates++;
+
+			// 配置 base-url 携带的路径段是外层前缀：请求路径落在其下时先剥离再匹配
+			int matchLength = bestPrefixMatchLength(auth,
+					stripConfiguredBasePath(requestPath, basePath(service.getBaseUrl())));
+			if (matchLength > 0) {
+				if (matchLength > bestPrefixLength) {
+					bestPrefixLength = matchLength;
+					bestPrefixMatch = new ResolvedService(entry.getKey(), service);
+					ambiguousPrefixMatch = false;
+				}
+				else if (matchLength == bestPrefixLength) {
+					ambiguousPrefixMatch = true;
+				}
+			}
+			if (auth.isFallback()) {
+				fallbackCount++;
+				if (fallbackMatch == null) {
+					fallbackMatch = new ResolvedService(entry.getKey(), service);
+				}
+			}
 		}
 
-		if (candidates.isEmpty()) {
-			if (!invalidConfigs.isEmpty()) {
+		if (validCandidates == 0) {
+			if (invalidConfigs != null) {
 				throw new FeignAuthConfigurationException(
 						"FeignAuth: service(s) matched baseUrl=" + baseUrl + " but have invalid auth config: "
-								+ String.join("; ", invalidConfigs));
+								+ invalidConfigs);
 			}
 			return null;
 		}
 
-		List<PrefixMatch> prefixMatches = new ArrayList<>();
-		for (MatchCandidate candidate : candidates) {
-			int matchLength = bestPrefixMatchLength(candidate.getService().getService().getAuth(),
-					candidate.getMatchPath());
-			if (matchLength > 0) {
-				prefixMatches.add(new PrefixMatch(candidate.getService(), matchLength));
-			}
-		}
-
-		if (!prefixMatches.isEmpty()) {
-			prefixMatches.sort(Comparator.comparingInt(PrefixMatch::getMatchLength).reversed());
-			PrefixMatch best = prefixMatches.get(0);
-			if (prefixMatches.size() > 1 && prefixMatches.get(1).getMatchLength() == best.getMatchLength()) {
+		if (bestPrefixMatch != null) {
+			if (ambiguousPrefixMatch) {
 				throw new FeignAuthConfigurationException(
 						"Multiple services matched requestPath=" + requestPath + " for baseUrl=" + baseUrl);
 			}
-			return best.getService();
+			return bestPrefixMatch;
 		}
 
-		List<ResolvedService> fallbackCandidates = new ArrayList<>();
-		for (MatchCandidate candidate : candidates) {
-			if (candidate.getService().getService().getAuth().isFallback()) {
-				fallbackCandidates.add(candidate.getService());
-			}
-		}
-
-		if (fallbackCandidates.isEmpty()) {
+		if (fallbackCount == 0) {
 			return null;
 		}
-		if (fallbackCandidates.size() > 1) {
+		if (fallbackCount > 1) {
 			throw new FeignAuthConfigurationException("Multiple fallback services configured for baseUrl=" + baseUrl);
 		}
-		return fallbackCandidates.get(0);
+		return fallbackMatch;
+	}
+
+	// 非法配置信息只在最终抛出异常时才会被读取，因此按需拼接，成功路径上不分配集合
+	private static StringBuilder appendInvalidConfig(StringBuilder invalidConfigs, String serviceName, String reason) {
+		if (invalidConfigs == null) {
+			invalidConfigs = new StringBuilder();
+		}
+		else {
+			invalidConfigs.append("; ");
+		}
+		return invalidConfigs.append(serviceName).append(reason);
 	}
 
 	// 解析失败（如服务发现名）时退化为小写去空白的原串，保持旧有字符串比较语义
-	private static String authorityKey(String url) {
+	private String authorityKey(String url) {
+		if (url == null) {
+			return "";
+		}
+		String cached = this.authorityCache.get(url);
+		if (cached != null) {
+			return cached;
+		}
+		String computed = computeAuthorityKey(url);
+		if (this.authorityCache.size() < MAX_URL_CACHE_ENTRIES) {
+			this.authorityCache.put(url, computed);
+		}
+		return computed;
+	}
+
+	private static String computeAuthorityKey(String url) {
 		String normalized = PathUtils.normalizeBaseUrlAuthority(url);
 		if (normalized != null) {
 			return normalized;
 		}
 		return StringUtils.isBlank(url) ? "" : StringUtils.strip(url).toLowerCase(Locale.ROOT);
+	}
+
+	// 与 authorityKey 同理：派生结果只取决于 URL 串本身，缓存不会因为配置变更而失效
+	private String basePath(String url) {
+		if (url == null) {
+			return "";
+		}
+		String cached = this.basePathCache.get(url);
+		if (cached != null) {
+			return cached;
+		}
+		String computed = PathUtils.baseUrlPath(url);
+		if (this.basePathCache.size() < MAX_URL_CACHE_ENTRIES) {
+			this.basePathCache.put(url, computed);
+		}
+		return computed;
 	}
 
 	private static String stripConfiguredBasePath(String requestPath, String basePath) {
@@ -150,48 +211,6 @@ public class ServiceMatcher {
 			}
 		}
 		return best;
-	}
-
-	private static final class MatchCandidate {
-
-		private final ResolvedService service;
-
-		private final String matchPath;
-
-		private MatchCandidate(ResolvedService service, String matchPath) {
-			this.service = service;
-			this.matchPath = matchPath;
-		}
-
-		private ResolvedService getService() {
-			return this.service;
-		}
-
-		private String getMatchPath() {
-			return this.matchPath;
-		}
-
-	}
-
-	private static final class PrefixMatch {
-
-		private final ResolvedService service;
-
-		private final int matchLength;
-
-		private PrefixMatch(ResolvedService service, int matchLength) {
-			this.service = service;
-			this.matchLength = matchLength;
-		}
-
-		private ResolvedService getService() {
-			return this.service;
-		}
-
-		private int getMatchLength() {
-			return this.matchLength;
-		}
-
 	}
 
 }
