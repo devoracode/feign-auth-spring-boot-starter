@@ -1,10 +1,12 @@
 package io.github.devoracode.feignauth.oauth2;
 
+import ch.qos.logback.classic.Level;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpServer;
 import io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties;
 import io.github.devoracode.feignauth.exception.FeignAuthConfigurationException;
 import io.github.devoracode.feignauth.exception.FeignAuthTokenException;
+import io.github.devoracode.feignauth.feign.LogCaptures;
 import io.github.devoracode.feignauth.header.HeaderManager;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -352,6 +354,222 @@ class OAuth2TokenRequestClientTest {
 
 		assertThatThrownBy(() -> createClient(http)).isInstanceOf(FeignAuthConfigurationException.class)
 				.hasMessageContaining("feign.auth.http.socket-timeout");
+	}
+
+	@Test
+	void defaultGetSendsClientCredentialsAsBasicAuthInsteadOfQuery() {
+		AtomicReference<RecordedRequest> recorded = recordTokenRequests();
+
+		FeignAuthProperties.Service service = service(this.tokenUrl);
+		service.getAuth().setMethod("get");
+
+		createClient(new FeignAuthProperties.Http()).requestToken("svc", service, clientCredentials());
+
+		assertThat(recorded.get().authorization).isEqualTo("Basic " + basicCredentials("id", "secret"));
+		assertThat(recorded.get().query).doesNotContain("client_secret").doesNotContain("client_id")
+				.contains("grant_type=client_credentials");
+	}
+
+	@Test
+	void parametersModePutsCredentialsBackIntoTheQueryAndWarnsOnce() {
+		LogCaptures logs = LogCaptures.attach(OAuth2TokenRequestClient.class);
+		try {
+			AtomicReference<RecordedRequest> recorded = recordTokenRequests();
+
+			FeignAuthProperties.Service service = service(this.tokenUrl);
+			service.getAuth().setMethod("get");
+			service.getAuth().setClientAuthentication("parameters");
+			OAuth2TokenRequestClient client = createClient(new FeignAuthProperties.Http());
+
+			// 旧服务端只读 query：这一行配置就是它退回 1.18 行为的开关
+			client.requestToken("svc", service, clientCredentials());
+			client.requestToken("svc", service, clientCredentials());
+
+			assertThat(recorded.get().query).contains("client_secret=secret");
+			assertThat(recorded.get().authorization).isNull();
+			assertThat(logs.contains(Level.WARN, "into the query string")).isTrue();
+			assertThat(logs.count(Level.WARN)).isEqualTo(1L);
+		}
+		finally {
+			logs.detach();
+		}
+	}
+
+	@Test
+	void basicModeOnPostMovesCredentialsOutOfTheRequestBody() {
+		AtomicReference<RecordedRequest> recorded = recordTokenRequests();
+
+		FeignAuthProperties.Service service = service(this.tokenUrl);
+		service.getAuth().setClientAuthentication("basic");
+
+		createClient(new FeignAuthProperties.Http()).requestToken("svc", service, clientCredentials());
+
+		assertThat(recorded.get().authorization).isEqualTo("Basic " + basicCredentials("id", "secret"));
+		assertThat(parseJsonBody(recorded.get().body)).doesNotContainKey("client_secret")
+				.containsEntry("grant_type", "client_credentials");
+	}
+
+	@Test
+	void autoModeOnPostKeepsCredentialsInTheBodyAndSendsNoAuthorizationHeader() {
+		AtomicReference<RecordedRequest> recorded = recordTokenRequests();
+
+		// POST 是多数派，且不少老 IdP 只认请求体里的 client_secret：auto 不得改变它的线上形态
+		createClient(new FeignAuthProperties.Http()).requestToken("svc", service(this.tokenUrl), clientCredentials());
+
+		assertThat(recorded.get().authorization).isNull();
+		assertThat(parseJsonBody(recorded.get().body)).containsEntry("client_id", "id")
+				.containsEntry("client_secret", "secret");
+	}
+
+	@Test
+	void basicModeDropsCustomNamedCredentialFieldsFromTheQuery() {
+		AtomicReference<RecordedRequest> recorded = recordTokenRequests();
+
+		FeignAuthProperties.Service service = service(this.tokenUrl);
+		service.getAuth().setMethod("get");
+		service.getAuth().getRequestFields().setClientId("appId");
+		service.getAuth().getRequestFields().setClientSecret("appSecret");
+		service.getAuth().getRequestFields().setGrantType("grantType");
+
+		FeignAuthProperties.Client client = clientCredentials();
+		client.setGrantType("client_credentials");
+
+		createClient(new FeignAuthProperties.Http()).requestToken("svc", service, client);
+
+		// 改名后的凭证字段同样要被摘掉，非凭证参数（grantType）保持原样发送
+		assertThat(recorded.get().query).isEqualTo("grantType=client_credentials");
+		assertThat(recorded.get().authorization).isEqualTo("Basic " + basicCredentials("id", "secret"));
+	}
+
+	@Test
+	void configuredAuthorizationHeaderIsNotOverwrittenByClientSecretBasic() {
+		// HttpHeaders 的 key 比较不区分大小写，配成 authorization 同样命中
+		AtomicReference<RecordedRequest> recorded = recordTokenRequests();
+		for (String headerName : new String[] { "Authorization", "authorization" }) {
+			FeignAuthProperties.Service service = service(this.tokenUrl);
+			service.getAuth().setMethod("get");
+			service.getAuth().getTokenRequestHeaders().put(headerName, "Bearer pre-configured");
+			recorded.set(null);
+
+			createClient(new FeignAuthProperties.Http()).requestToken("svc", service, clientCredentials());
+
+			assertThat(recorded.get().authorization).isEqualTo("Bearer pre-configured");
+			assertThat(recorded.get().query).doesNotContain("client_secret");
+		}
+	}
+
+	@Test
+	void clientIdWithColonFailsFastNamingTheServiceAndTheWayOut() {
+		// Spring 的 setBasicAuth 拒绝含冒号的用户名（实测消息为 "Username must not contain a colon"），
+		// 裸 IllegalArgumentException 里没有服务名、也看不出是认证方式的问题
+		FeignAuthProperties.Service service = service(this.tokenUrl);
+		service.getAuth().setMethod("get");
+		FeignAuthProperties.Client client = clientCredentials();
+		client.setId("id:with-colon");
+
+		assertThatThrownBy(() -> createClient(new FeignAuthProperties.Http()).requestToken("ast", service, client))
+				.isInstanceOf(FeignAuthConfigurationException.class)
+				.hasMessageContaining("ast")
+				.hasMessageContaining("client-authentication");
+	}
+
+	@Test
+	void tokenUrlWithoutSchemeFailsFastWithItsConfigKey() {
+		// 缺协议名时旧写法：GET 走 URIBuilder 尚可，POST 的 new HttpPost(String) 抛的是不含配置键的
+		// IllegalArgumentException（M10）
+		for (String method : new String[] { "get", "post" }) {
+			FeignAuthProperties.Service service = service("127.0.0.1:" + this.server.getAddress().getPort() + "/token");
+			service.getAuth().setMethod(method);
+
+			assertThatThrownBy(() -> createClient(new FeignAuthProperties.Http())
+					.requestToken("svc", service, clientCredentials()))
+					.isInstanceOf(FeignAuthConfigurationException.class)
+					.hasMessageContaining("Invalid token-url");
+		}
+	}
+
+	@Test
+	void insecureTokenUrlWarnsOncePerAuthorityAndStaysQuietOnLoopback() {
+		LogCaptures logs = LogCaptures.attach(OAuth2TokenRequestClient.class);
+		try {
+			OAuth2TokenRequestClient client = createClient(shortTimeoutHttp());
+			// 192.0.2.0/24 是保留的文档网段，不会真的连出去
+			FeignAuthProperties.Service first = service("http://192.0.2.1:9/token");
+			FeignAuthProperties.Service sameAuthority = service("http://192.0.2.1:9/token");
+			FeignAuthProperties.Service otherAuthority = service("http://192.0.2.2:9/token");
+
+			for (FeignAuthProperties.Service candidate : Arrays.asList(first, sameAuthority, otherAuthority)) {
+				probeTokenRequest(client, candidate);
+			}
+			assertThat(logs.count(Level.WARN)).isEqualTo(2L);
+
+			// 本地开发的明文回环地址是正常用法，不该刷 WARN
+			probeTokenRequest(client, service(this.tokenUrl));
+			assertThat(logs.count(Level.WARN)).isEqualTo(2L);
+		}
+		finally {
+			logs.detach();
+		}
+	}
+
+	private static void probeTokenRequest(OAuth2TokenRequestClient client, FeignAuthProperties.Service service) {
+		try {
+			client.requestToken("svc", service, clientCredentials());
+		}
+		catch (Exception ex) {
+			// 本测试只关心取号前发出的 WARN，连不上是预期内的
+		}
+	}
+
+	private static FeignAuthProperties.Http shortTimeoutHttp() {
+		FeignAuthProperties.Http http = new FeignAuthProperties.Http();
+		http.setConnectTimeout(Duration.ofMillis(200));
+		http.setConnectionRequestTimeout(Duration.ofMillis(200));
+		http.setSocketTimeout(Duration.ofMillis(200));
+		return http;
+	}
+
+	private AtomicReference<RecordedRequest> recordTokenRequests() {
+		AtomicReference<RecordedRequest> recorded = new AtomicReference<>();
+		this.server.createContext("/token", exchange -> {
+			RecordedRequest request = new RecordedRequest();
+			request.method = exchange.getRequestMethod();
+			request.query = exchange.getRequestURI().getRawQuery();
+			request.authorization = exchange.getRequestHeaders().getFirst("Authorization");
+			request.body = readRequestBody(exchange);
+			recorded.set(request);
+			respond(exchange, 200, "{\"access_token\":\"t\",\"expires_in\":600}");
+		});
+		return recorded;
+	}
+
+	private static final class RecordedRequest {
+
+		private String method;
+
+		private String query;
+
+		private String authorization;
+
+		private String body;
+
+	}
+
+	private static String basicCredentials(String id, String secret) {
+		return java.util.Base64.getEncoder()
+				.encodeToString((id + ":" + secret).getBytes(StandardCharsets.UTF_8));
+	}
+
+	private static Map<String, String> parseJsonBody(String body) {
+		try {
+			Map<String, String> values = new ObjectMapper().readValue(body,
+					new com.fasterxml.jackson.core.type.TypeReference<Map<String, String>>() {
+					});
+			return values;
+		}
+		catch (IOException ex) {
+			throw new IllegalStateException("Unexpected request body: " + body, ex);
+		}
 	}
 
 	private OAuth2TokenRequestClient createClient(FeignAuthProperties.Http http) {

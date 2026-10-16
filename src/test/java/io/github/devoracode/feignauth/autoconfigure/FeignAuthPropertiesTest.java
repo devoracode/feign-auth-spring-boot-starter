@@ -214,4 +214,22 @@ class FeignAuthPropertiesTest {
 		assertThat(cache.getRedis().getKeyPrefix()).isEqualTo("feign-auth:");
 	}
 
+	@Test
+	void illegalClientAuthenticationIsRejectedAtStartup() {
+		// 拼错时取号会静默退回默认认证方式，使用方以为切换成功却毫无提示
+		assertThatThrownBy(propertiesWithAuth(auth -> auth.setClientAuthentication("secret-basic"))::afterPropertiesSet)
+				.isInstanceOf(FeignAuthConfigurationException.class)
+				.hasMessageContaining("feign.services.order.auth.client-authentication");
+
+		assertThatThrownBy(propertiesWithAuth(auth -> auth.setClientAuthentication(null))::afterPropertiesSet)
+				.hasMessageContaining("feign.services.order.auth.client-authentication");
+	}
+
+	@Test
+	void clientAuthenticationAcceptsItsThreeValuesInAnyLetterCase() {
+		for (String mode : new String[] {"auto", "AUTO", "basic", "Basic", "parameters", "PARAMETERS"}) {
+			propertiesWithAuth(auth -> auth.setClientAuthentication(mode)).afterPropertiesSet();
+		}
+	}
+
 }

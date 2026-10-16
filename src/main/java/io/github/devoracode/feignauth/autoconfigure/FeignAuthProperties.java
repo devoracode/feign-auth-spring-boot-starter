@@ -88,6 +88,20 @@ public class FeignAuthProperties implements InitializingBean {
             throw invalid(keyPrefix + "token-expires-in-seconds", tokenExpiresInSeconds, "must be greater than 0");
         }
         validateExpiredTokenStatuses(keyPrefix, auth);
+        validateClientAuthentication(keyPrefix, auth);
+    }
+
+    /**
+     * {@code client-authentication} 只有 auto/basic/parameters 三个取值：拼错时取号会静默退回默认行为
+     * （GET 用 Basic、POST 用参数），使用方以为切换了认证方式却没有任何提示，故在启动期点名拦住。
+     */
+    private static void validateClientAuthentication(String keyPrefix, Auth auth) {
+        String mode = StringUtils.trimToEmpty(auth.getClientAuthentication());
+        if (!"auto".equalsIgnoreCase(mode) && !"basic".equalsIgnoreCase(mode)
+                && !"parameters".equalsIgnoreCase(mode)) {
+            throw invalid(keyPrefix + "client-authentication", auth.getClientAuthentication(),
+                    "must be one of 'auto' (GET uses basic, POST uses parameters), 'basic', 'parameters'");
+        }
     }
 
     /**
@@ -230,6 +244,11 @@ public class FeignAuthProperties implements InitializingBean {
         private String tokenUrl;
 
         private String method = "post";
+
+        /**
+         * 客户端凭证的发送方式：{@code auto}（默认）| {@code basic} | {@code parameters}。
+         */
+        private String clientAuthentication = "auto";
 
         private String tokenHeader = "x-token";
 

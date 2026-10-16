@@ -6,6 +6,8 @@ import io.github.devoracode.feignauth.exception.FeignAuthConfigurationException;
 import io.github.devoracode.feignauth.exception.FeignAuthTokenException;
 import io.github.devoracode.feignauth.header.HeaderManager;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.http.HttpEntity;
 import org.apache.http.NameValuePair;
 import org.apache.http.ParseException;
@@ -38,6 +40,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -48,9 +52,15 @@ import java.util.concurrent.TimeUnit;
  */
 public class OAuth2TokenRequestClient implements AutoCloseable {
 
+	private static final Log logger = LogFactory.getLog(OAuth2TokenRequestClient.class);
+
 	// 取号响应体的读取上限：正常令牌响应远小于此，超出只可能是错误页或伪造的 Content-Length。
 	// 按实际读到的字节判定，绝不按对方声明的长度预分配缓冲
 	private static final int MAX_RESPONSE_BODY_BYTES = 64 * 1024;
+
+	private static final String CLIENT_AUTHENTICATION_BASIC = "basic";
+
+	private static final String CLIENT_AUTHENTICATION_PARAMETERS = "parameters";
 
 	private final CloseableHttpClient httpClient;
 
@@ -59,6 +69,9 @@ public class OAuth2TokenRequestClient implements AutoCloseable {
 	private final HeaderManager headerManager;
 
 	private final ObjectMapper objectMapper;
+
+	// 取号是可能反复发生的路径（令牌过期、被驱逐），同一原因的 WARN 只记一次
+	private final Set<String> warnedOnce = ConcurrentHashMap.newKeySet();
 
 	public OAuth2TokenRequestClient(OAuth2TokenResponseParser responseParser, HeaderManager headerManager,
 			ObjectMapper objectMapper, FeignAuthProperties.Http http) {
@@ -92,22 +105,36 @@ public class OAuth2TokenRequestClient implements AutoCloseable {
 		}
 		Map<String, String> parameters = buildTokenRequestParameters(auth, client);
 		String method = auth.getMethod() == null ? "post" : auth.getMethod().trim().toLowerCase();
+		boolean credentialsInParameters = credentialsInParameters(auth, method);
+		if (credentialsInParameters && "get".equals(method)) {
+			warnCredentialsInQuery(serviceName);
+		}
+		if (!credentialsInParameters) {
+			// RFC 6749 §2.3.1：一个请求只能使用一种客户端认证方式，走 Basic 时参数里不能再留凭证。
+			// 字段名与 buildTokenRequestParameters 同源，request-fields 改名后依然生效
+			parameters.remove(StringUtils.defaultString(auth.getRequestFields().getClientId(), "client_id"));
+			parameters.remove(StringUtils.defaultString(auth.getRequestFields().getClientSecret(), "client_secret"));
+		}
 		if ("get".equals(method)) {
-			return requestTokenByGet(serviceName, service, auth, client, parameters);
+			return requestTokenByGet(serviceName, service, auth, client, parameters, credentialsInParameters);
 		}
 		if ("post".equals(method)) {
-			return requestTokenByPost(serviceName, service, auth, client, parameters);
+			return requestTokenByPost(serviceName, service, auth, client, parameters, credentialsInParameters);
 		}
 		throw new FeignAuthConfigurationException("Unsupported OAuth2 token method: " + auth.getMethod());
 	}
 
 	private OAuth2AccessToken requestTokenByGet(String serviceName, FeignAuthProperties.Service service,
-			FeignAuthProperties.Auth auth, FeignAuthProperties.Client client, Map<String, String> parameters) {
+			FeignAuthProperties.Auth auth, FeignAuthProperties.Client client, Map<String, String> parameters,
+			boolean credentialsInParameters) {
 		HttpHeaders headers = this.headerManager.buildTokenHeaders(serviceName, service, client, parameters);
+		if (!credentialsInParameters) {
+			applyClientSecretBasic(headers, serviceName, client);
+		}
 
 		URI uri;
 		try {
-			URIBuilder builder = new URIBuilder(auth.getTokenUrl());
+			URIBuilder builder = new URIBuilder(parseTokenUrl(auth));
 			parameters.forEach(builder::addParameter);
 			uri = builder.build();
 		}
@@ -121,15 +148,108 @@ public class OAuth2TokenRequestClient implements AutoCloseable {
 	}
 
 	private OAuth2AccessToken requestTokenByPost(String serviceName, FeignAuthProperties.Service service,
-			FeignAuthProperties.Auth auth, FeignAuthProperties.Client client, Map<String, String> parameters) {
+			FeignAuthProperties.Auth auth, FeignAuthProperties.Client client, Map<String, String> parameters,
+			boolean credentialsInParameters) {
 		HttpHeaders headers = this.headerManager.buildTokenHeaders(serviceName, service, client, parameters);
+		if (!credentialsInParameters) {
+			applyClientSecretBasic(headers, serviceName, client);
+		}
 
 		ContentType contentType = resolveTokenRequestContentType(headers);
 
-		HttpPost request = new HttpPost(auth.getTokenUrl());
+		HttpPost request = new HttpPost(parseTokenUrl(auth));
 		copyHeaders(headers, request);
 		request.setEntity(buildRequestEntity(contentType, parameters));
 		return execute(request, auth);
+	}
+
+	/**
+	 * 判断客户端凭证是否以「参数」形式发送（GET 即 query string，POST 即请求体）。
+	 *
+	 * <p>默认 {@code auto}：GET 走 RFC 6749 §2.3.1 的 {@code client_secret_basic}——
+	 * {@code client_secret} 出现在 URL 里会被代理、网关与服务端访问日志留存；POST 保持参数进请求体
+	 * （{@code client_secret_post}）以兼容既有对接。取值大小写不敏感，未知取值按 {@code auto} 处理
+	 * （配置路径上的笔误已由 {@link FeignAuthProperties} 启动期拦截）。
+	 */
+	private static boolean credentialsInParameters(FeignAuthProperties.Auth auth, String method) {
+		String mode = StringUtils.trimToEmpty(auth.getClientAuthentication());
+		if (CLIENT_AUTHENTICATION_BASIC.equalsIgnoreCase(mode)) {
+			return false;
+		}
+		if (CLIENT_AUTHENTICATION_PARAMETERS.equalsIgnoreCase(mode)) {
+			return true;
+		}
+		return !"get".equals(method);
+	}
+
+	// RFC 6749 §2.3.1 的 client_secret_basic：client_id:client_secret 按 UTF-8 编码后 Base64
+	// （与请求体的编码口径一致）。使用方已在 token-request-headers / HeaderCustomizer 里配置了
+	// Authorization 时以它为准，starter 不再代发凭证
+	private static void applyClientSecretBasic(HttpHeaders headers, String serviceName,
+			FeignAuthProperties.Client client) {
+		if (headers.containsKey(HttpHeaders.AUTHORIZATION)) {
+			if (logger.isDebugEnabled()) {
+				logger.debug("FeignAuth: Authorization header already configured for the token request,"
+						+ " client credentials are sent neither as parameters nor as Basic auth");
+			}
+			return;
+		}
+		try {
+			headers.setBasicAuth(client.getId(), client.getSecret(), StandardCharsets.UTF_8);
+		}
+		catch (IllegalArgumentException ex) {
+			// Spring 的 setBasicAuth 拒绝含冒号的用户名（无法与 "id:secret" 的格式区分），
+			// 原样抛出会是一条没有配置键的 IllegalArgumentException
+			throw new FeignAuthConfigurationException("FeignAuth: client id of service '" + serviceName
+					+ "' cannot be used with client-authentication=basic (" + ex.getMessage()
+					+ "); fix the client id or switch to client-authentication: parameters");
+		}
+	}
+
+	// 显式选择 parameters + GET 时 secret 会重新出现在 URL 中：提示一次，便于定位泄露来源
+	private void warnCredentialsInQuery(String serviceName) {
+		if (this.warnedOnce.add("credentials-in-query:" + serviceName)) {
+			logger.warn("FeignAuth: client-authentication=parameters with method=get puts client_id/client_secret"
+					+ " into the query string for service '" + serviceName + "'; they are visible to proxies,"
+					+ " gateways and access logs — the default basic mode keeps them in the Authorization header");
+		}
+	}
+
+	// GET/POST 共用：POST 分支此前把原始字符串交给 HttpPost(String)，非法 URL 抛的是 URI.create 的
+	// IllegalArgumentException，消息里既没有配置键、也看不出问题出在 token-url
+	private URI parseTokenUrl(FeignAuthProperties.Auth auth) {
+		String tokenUrl = auth.getTokenUrl();
+		URI uri;
+		try {
+			uri = new URI(tokenUrl.trim());
+		}
+		catch (URISyntaxException ex) {
+			throw new FeignAuthConfigurationException("Invalid token-url: " + tokenUrl);
+		}
+		warnIfInsecureTokenUrl(uri);
+		return uri;
+	}
+
+	// 非 https 的 token-url 会让 client_secret 与返回的令牌明文过网：按 authority 提示一次。
+	// 回环地址是本地开发的正常用法，不提示
+	private void warnIfInsecureTokenUrl(URI uri) {
+		String scheme = uri.getScheme();
+		if (scheme == null || "https".equalsIgnoreCase(scheme) || isLoopbackHost(uri.getHost())) {
+			return;
+		}
+		if (this.warnedOnce.add("insecure-token-url:" + scheme.toLowerCase(Locale.ROOT) + "://"
+				+ uri.getAuthority())) {
+			logger.warn("FeignAuth: token-url '" + uri + "' is not https; client credentials and access tokens"
+					+ " can be read or modified in transit");
+		}
+	}
+
+	private static boolean isLoopbackHost(String host) {
+		if (host == null) {
+			return false;
+		}
+		return "localhost".equalsIgnoreCase(host) || "::1".equals(host) || "[::1]".equals(host)
+				|| host.startsWith("127.");
 	}
 
 	// 配置的 Content-Type 决定请求体编码方案，避免头体错配；未配置默认 JSON

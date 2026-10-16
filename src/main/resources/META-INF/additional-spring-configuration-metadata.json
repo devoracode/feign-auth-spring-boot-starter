@@ -40,13 +40,19 @@
     {
       "name": "feign.services.*.auth.token-url",
       "type": "java.lang.String",
-      "description": "OAuth2 token endpoint URL."
+      "description": "OAuth2 token endpoint URL. Use https: a plain http endpoint sends client credentials and the issued token in clear text (the starter logs one WARN per authority, loopback addresses excepted)."
     },
     {
       "name": "feign.services.*.auth.method",
       "type": "java.lang.String",
-      "description": "HTTP method used to request OAuth2 tokens. Supported values are post and get.",
+      "description": "HTTP method used to request OAuth2 tokens. Supported values are post and get. With get, client credentials are sent in the Authorization header unless client-authentication=parameters puts them back into the query string.",
       "defaultValue": "post"
+    },
+    {
+      "name": "feign.services.*.auth.client-authentication",
+      "type": "java.lang.String",
+      "description": "How client credentials are sent to the token endpoint: auto (default - get uses HTTP Basic, post sends them as request parameters), basic (always HTTP Basic via the Authorization header), parameters (always request parameters - with method=get the client_secret appears in the query string).",
+      "defaultValue": "auto"
     },
     {
       "name": "feign.services.*.auth.token-header",
@@ -223,6 +229,23 @@
         },
         {
           "value": "get"
+        }
+      ]
+    },
+    {
+      "name": "feign.services.*.auth.client-authentication",
+      "values": [
+        {
+          "value": "auto",
+          "description": "get sends credentials as HTTP Basic, post sends them as request parameters."
+        },
+        {
+          "value": "basic",
+          "description": "Always send credentials as Authorization: Basic (RFC 6749 client_secret_basic)."
+        },
+        {
+          "value": "parameters",
+          "description": "Always send credentials as request parameters; with get they land in the query string."
         }
       ]
     },
