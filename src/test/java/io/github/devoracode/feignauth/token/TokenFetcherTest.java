@@ -3,6 +3,7 @@ package io.github.devoracode.feignauth.token;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties;
 import io.github.devoracode.feignauth.exception.FeignAuthConfigurationException;
+import io.github.devoracode.feignauth.exception.FeignAuthTokenException;
 import io.github.devoracode.feignauth.header.HeaderManager;
 import io.github.devoracode.feignauth.oauth2.OAuth2ClientMatcher;
 import io.github.devoracode.feignauth.oauth2.OAuth2TokenRequestClient;
@@ -13,6 +14,7 @@ import io.github.devoracode.feignauth.oauth2.lock.LockProvider;
 import io.github.devoracode.feignauth.oauth2.store.LocalTokenStore;
 import io.github.devoracode.feignauth.oauth2.store.TokenStore;
 import org.junit.jupiter.api.Test;
+import org.springframework.data.redis.RedisConnectionFailureException;
 
 import java.util.Arrays;
 import java.util.HashMap;
@@ -72,11 +74,15 @@ class TokenFetcherTest {
 		FeignAuthProperties properties = new FeignAuthProperties();
 		properties.setServices(services(oauth2Service(client("c1"))));
 		TokenStore tokenStore = mock(TokenStore.class);
-		when(tokenStore.remove("svc:c1")).thenThrow(new RuntimeException("redis down")).thenReturn(true);
+		when(tokenStore.remove("svc:c1")).thenThrow(new RedisConnectionFailureException("redis down")).thenReturn(true);
 		TokenFetcher tokenFetcher = createTokenFetcher(properties, tokenStore);
 
+		// 存储故障必须转成 starter 自己的异常类型再交给业务方，而不是让 spring-data 的异常原样穿过
+		// ErrorDecoder；同时保留 cause，排查时还能看出真实原因是 Redis 而非令牌本身
 		assertThatThrownBy(() -> tokenFetcher.invalidateToken("svc", "/api/x"))
-				.hasMessage("redis down");
+				.isInstanceOf(FeignAuthTokenException.class)
+				.hasMessageContaining("redis down")
+				.hasCauseInstanceOf(RedisConnectionFailureException.class);
 		assertThat(tokenFetcher.invalidateToken("svc", "/api/x")).isTrue();
 	}
 

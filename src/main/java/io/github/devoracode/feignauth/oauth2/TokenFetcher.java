@@ -2,6 +2,7 @@ package io.github.devoracode.feignauth.oauth2;
 
 import io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties;
 import io.github.devoracode.feignauth.exception.FeignAuthConfigurationException;
+import io.github.devoracode.feignauth.exception.FeignAuthTokenException;
 import io.github.devoracode.feignauth.oauth2.lock.LockProvider;
 import io.github.devoracode.feignauth.oauth2.store.TokenStore;
 import org.apache.commons.lang3.StringUtils;
@@ -99,7 +100,7 @@ public class TokenFetcher {
 			}
 			return false;
 		}
-		boolean removed = this.tokenStore.remove(cacheKey);
+		boolean removed = removeCachedToken(serviceName, client, cacheKey);
 		// 只在真正驱逐到令牌时才起算冷却：空转的淘汰（缓存已按 TTL 自行过期）或 remove 抛异常
 		// 都不该写入时间戳，否则会把随后确实能驱逐成功的尝试一并锁死 30 秒
 		if (removed) {
@@ -110,6 +111,25 @@ public class TokenFetcher {
 			}
 		}
 		return removed;
+	}
+
+	/**
+	 * 驱逐缓存令牌，并把存储层故障收敛为 {@link FeignAuthTokenException}。
+	 *
+	 * <p>Redis 连接失败、序列化异常等都是 spring-data 的 RuntimeException，此前会原样穿过
+	 * {@code FeignAuthStatusHandler} 交给业务方：调用方看到的是与鉴权无关的异常类型，
+	 * 无法用 starter 声明的异常做统一降级。cause 一律保留，真实原因仍可读出。
+	 */
+	private boolean removeCachedToken(String serviceName, FeignAuthProperties.Client client, String cacheKey) {
+		try {
+			return this.tokenStore.remove(cacheKey);
+		}
+		// 按 RuntimeException 收敛而不是 DataAccessException：TokenStore 并不绑定 Redis，
+		// 本地实现与使用方自建实现抛出的异常类型各不相同
+		catch (RuntimeException ex) {
+			throw new FeignAuthTokenException("FeignAuth: token eviction failed for service='" + serviceName
+					+ "', clientId='" + client.getId() + "': " + ex.getMessage(), ex);
+		}
 	}
 
 	/**
