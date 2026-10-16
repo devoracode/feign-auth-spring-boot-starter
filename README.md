@@ -24,6 +24,7 @@ Spring Boot Starter，为 OpenFeign 提供多服务鉴权自动注入与自定�
 ## 核心特性
 
 - OAuth2 Token 自动获取、缓存与刷新，支持 `GET` / `POST` 两种请求方式
+- 客户端凭证发送方式可配置（`client-authentication: auto` / `basic` / `parameters`）：`GET` 默认按 RFC 6749 `client_secret_basic` 走 `Authorization` 头，凭据不落查询串
 - API Key 鉴权，支持自定义 Header 名与前缀
 - 同一服务可按请求路径前缀匹配不同 OAuth2 Client 凭证
 - 同域名下支持多个服务配置，按最长路径前缀优先匹配 + 兜底
@@ -87,6 +88,7 @@ feign:
         type: oauth2
         token-url: https://api.service-a.com/oauth/token
         method: post                        # 默认 post，可选 get
+        client-authentication: auto         # 凭据发送方式：auto（默认，get 走 Basic 头、post 走参数）| basic | parameters
         token-header: x-token               # Token 写入的 Header 名，默认 x-token
         token-prefix: "Bearer "             # 拼接在 Header 值前面，默认空；含空格时需加引号
         token-field: data.accessToken       # Token 提取路径，不填则自动识别
@@ -140,6 +142,41 @@ POST 取号的请求体编码由 `token-request-headers` 中的 `Content-Type` �
 - `application/json`（或 `*/*+json`、`text/json` 等 json 类型）：参数以 JSON 对象发送；
 - `application/x-www-form-urlencoded`：参数以表单键值对发送（UTF-8，符合 RFC 6749 的 token 端点惯例）；
 - 其他值或无法解析的值：启动后首次取号即抛 `FeignAuthConfigurationException` 快速失败，不会发出头体错配的请求。
+
+### 客户端认证方式（client-authentication）
+
+`client_id` / `client_secret` 可以用两种方式发给 IdP：作为 token 请求参数（GET 进查询串、POST 进请求体），或按 RFC 6749 §2.3.1 的 `client_secret_basic` 放进 `Authorization: Basic` 头。`feign.services.<name>.auth.client-authentication` 选择用哪种，取值大小写不敏感，其他取值在启动期按配置键抛 `FeignAuthConfigurationException`：
+
+| 取值 | 行为 |
+|---|---|
+| `auto`（默认） | `method: get` 用 Basic 头；`method: post` 保持参数形态（凭据在请求体中） |
+| `basic` | 两种方法都用 `Authorization: Basic`，参数表里不再出现凭据 |
+| `parameters` | 两种方法都用参数，即 1.18 及更早的线上形态 |
+
+```text
+# method: get + auto（默认）
+GET /oauth/token?grant_type=client_credentials
+Authorization: Basic base64(<client_id>:<client_secret>)
+
+# method: get + client-authentication: parameters
+GET /oauth/token?grant_type=client_credentials&client_id=<客户端ID>&client_secret=<明文密钥>
+```
+
+选 `auto` 而不是无条件改 Basic 的原因：POST 用户占多数，且不少老 IdP 只认请求体里的 `client_secret`——`auto` 下 POST 的请求体与 1.18 完全一致（不发 `Authorization` 头）。真正会泄密的是 GET：查询串比请求体更容易留痕，IdP 与中间网关/负载均衡的访问日志、APM 与错误采集（不少会记录完整 URL）、Apache HttpClient 的 `httpclient.wire` / `headers` DEBUG 日志都会带上明文密钥，所以 GET 默认改走 Basic。
+
+配套的三点口径：
+
+- 只摘掉凭据两个字段（字段名取自 `request-fields`，改名后同样生效），`grant-type` 等其他参数照常发送；
+- 已经在 `token-request-headers` 或 `HeaderCustomizer` 里配置了 `Authorization` 时以配置为准，starter 不代发凭据（此时凭据也不会出现在参数里），只在 DEBUG 记一条说明；
+- Basic 用 UTF-8 编码 `id:secret`（与请求体同口径）。`client_id` 含冒号导致无法构造 Basic 时，抛 `FeignAuthConfigurationException` 并点名该服务，提示改 `client_id` 或退回 `client-authentication: parameters`。
+
+显式选择 `parameters` 且 `method: get` 时，凭据会重新回到 URL 中：starter 不拦阻，但按服务记一次 WARN 说明泄露面，便于定位配置来源。若 IdP 不支持 Basic 而只能用 GET，这一行配置就是退回旧行为的开关。
+
+### 凭据与传输安全
+
+**`token-url` 请使用 HTTPS**。配成明文 `http://` 时，`client_secret` 与返回的 access token 都明文过网，同网段中间人可直接取走；客户端凭证一旦泄露，等价于该 Client 的全部权限。starter 会在首次取号时按 authority（host:port）记一次 WARN，回环地址（`localhost`、`127.*`、`::1`）视为本地开发用法不提示。生产环境仍须自行确认 `token-url` 为 HTTPS，且未放宽证书校验——WARN 只是提醒，starter 不会拒发请求。
+
+> 已知边界：`token-url` 缺少协议名（如写成 `127.0.0.1:8080/oauth/token`）时，GET/POST 都在请求期抛 `FeignAuthConfigurationException: Invalid token-url: <原值>`；使用非 HTTP(S) 协议（如 `ftp://`）时，报错仍在请求期且不含配置键——`FeignAuthTokenException: Token request failed: null`。排障时先核对 URL 写法。
 
 ### Token 响应解析
 
@@ -265,7 +302,8 @@ feign:
       auth:
         type: oauth2
         token-url: https://api.service-b.com/oauth/token
-        method: get
+        method: get                          # 凭据默认走 Authorization: Basic，不进查询串
+        # client-authentication: parameters  # IdP 只读 query 参数时才需要（会 WARN 提示凭据在 URL 中）
         request-fields:
           client-id: appId
           client-secret: appSecret
