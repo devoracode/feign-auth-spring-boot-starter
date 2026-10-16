@@ -190,7 +190,11 @@ public class OAuth2TokenRequestClient implements AutoCloseable {
 	}
 
 	// 读满上限即停：未读完的正文留在流上，响应关闭时连接直接丢弃
-	private static ResponseBody readBody(InputStream in, Charset charset) throws IOException {
+	static ResponseBody readBody(InputStream in, Charset charset) throws IOException {
+		// 与原先的 EntityUtils.toString 保持同样的容忍：null 内容流按空正文处理
+		if (in == null) {
+			return new ResponseBody(null, false);
+		}
 		ByteArrayOutputStream buffer = new ByteArrayOutputStream();
 		byte[] chunk = new byte[8192];
 		boolean truncated = false;
@@ -209,22 +213,22 @@ public class OAuth2TokenRequestClient implements AutoCloseable {
 		return new ResponseBody(new String(buffer.toByteArray(), charset), truncated);
 	}
 
-	private static final class ResponseBody {
+	static final class ResponseBody {
 
 		private final String text;
 
 		private final boolean truncated;
 
-		private ResponseBody(String text, boolean truncated) {
+		ResponseBody(String text, boolean truncated) {
 			this.text = text;
 			this.truncated = truncated;
 		}
 
-		private String getText() {
+		String getText() {
 			return this.text;
 		}
 
-		private boolean isTruncated() {
+		boolean isTruncated() {
 			return this.truncated;
 		}
 

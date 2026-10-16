@@ -290,6 +290,16 @@ class OAuth2TokenRequestClientTest {
 		assertThat(captured.get()).contains("gateway-failure").doesNotContain("TAIL-MARKER");
 	}
 
+	@Test
+	void nullContentStreamIsReadAsEmptyBodyInsteadOfThrowing() throws IOException {
+		// 此前交给 EntityUtils.toString 时，内容流为 null 会直接得到 null 正文；自己读流后必须保持
+		// 同样的容忍，否则 NPE 会被锁包装器改写成「Error executing with lock…」，掩盖真实原因
+		OAuth2TokenRequestClient.ResponseBody body = OAuth2TokenRequestClient.readBody(null, StandardCharsets.UTF_8);
+
+		assertThat(body.getText()).isNull();
+		assertThat(body.isTruncated()).isFalse();
+	}
+
 	private static String repeat(char value, int count) {
 		char[] chars = new char[count];
 		Arrays.fill(chars, value);
