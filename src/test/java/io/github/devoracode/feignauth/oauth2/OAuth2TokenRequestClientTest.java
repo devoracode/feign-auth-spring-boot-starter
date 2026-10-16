@@ -18,6 +18,7 @@ import java.net.InetSocketAddress;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -237,6 +238,47 @@ class OAuth2TokenRequestClientTest {
 
 		client.requestToken("svc", service(this.tokenUrl), clientCredentials());
 		assertThat(receivedBody.get()).startsWith("{\"HashMap\":");
+	}
+
+	@Test
+	void oversizedSuccessResponseIsRejectedAtTheLimit() {
+		this.server.createContext("/token", exchange -> respond(exchange, 200,
+				"{\"access_token\":\"" + repeat('a', 2 * 1024 * 1024) + "\",\"expires_in\":600}"));
+
+		OAuth2TokenRequestClient client = createClient(new FeignAuthProperties.Http());
+
+		assertThatThrownBy(() -> client.requestToken("svc", service(this.tokenUrl), clientCredentials()))
+				.isInstanceOf(FeignAuthTokenException.class)
+				.hasMessageContaining("65536");
+	}
+
+	@Test
+	void oversizedResponseBodyIsTruncatedBeforeParsing() {
+		this.server.createContext("/token", exchange -> respond(exchange, 502,
+				"<html>gateway-failure" + repeat('x', 1024 * 1024) + "TAIL-MARKER</html>"));
+
+		AtomicReference<String> captured = new AtomicReference<>();
+		OAuth2TokenResponseParser capturing = new OAuth2TokenResponseParser(new ObjectMapper()) {
+			@Override
+			public OAuth2AccessToken parse(int statusCode, String body, long expireAheadSeconds, String tokenField,
+					Long configuredExpiresInSeconds) {
+				captured.set(body);
+				return super.parse(statusCode, body, expireAheadSeconds, tokenField, configuredExpiresInSeconds);
+			}
+		};
+		OAuth2TokenRequestClient client = new OAuth2TokenRequestClient(capturing, new HeaderManager(),
+				new ObjectMapper(), new FeignAuthProperties.Http());
+
+		assertThatThrownBy(() -> client.requestToken("svc", service(this.tokenUrl), clientCredentials()))
+				.isInstanceOf(FeignAuthTokenException.class);
+		assertThat(captured.get().length()).isLessThanOrEqualTo(65536);
+		assertThat(captured.get()).contains("gateway-failure").doesNotContain("TAIL-MARKER");
+	}
+
+	private static String repeat(char value, int count) {
+		char[] chars = new char[count];
+		Arrays.fill(chars, value);
+		return new String(chars);
 	}
 
 	private OAuth2TokenRequestClient createClient(FeignAuthProperties.Http http) {

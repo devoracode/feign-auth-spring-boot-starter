@@ -21,11 +21,12 @@ import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
 import org.apache.http.message.BasicNameValuePair;
-import org.apache.http.util.EntityUtils;
 import org.springframework.http.HttpHeaders;
 import org.springframework.util.Assert;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.Charset;
@@ -45,6 +46,10 @@ import java.util.concurrent.TimeUnit;
  * @since 1.0.0
  */
 public class OAuth2TokenRequestClient implements AutoCloseable {
+
+	// 取号响应体的读取上限：正常令牌响应远小于此，超出只可能是错误页或伪造的 Content-Length。
+	// 按实际读到的字节判定，绝不按对方声明的长度预分配缓冲
+	private static final int MAX_RESPONSE_BODY_BYTES = 64 * 1024;
 
 	private final CloseableHttpClient httpClient;
 
@@ -167,13 +172,60 @@ public class OAuth2TokenRequestClient implements AutoCloseable {
 		try (CloseableHttpResponse response = this.httpClient.execute(request)) {
 			int statusCode = response.getStatusLine().getStatusCode();
 			HttpEntity entity = response.getEntity();
-			String body = entity == null ? null : EntityUtils.toString(entity, resolveResponseCharset(entity));
-			return this.responseParser.parse(statusCode, body, auth.getExpireAheadSeconds(), auth.getTokenField(),
-					auth.getTokenExpiresInSeconds());
+			ResponseBody body = entity == null ? new ResponseBody(null, false)
+					: readBody(entity.getContent(), resolveResponseCharset(entity));
+			// 2xx 却超出上限的不可能是令牌响应，残缺 JSON 交给解析器只会得到对不上真实原因的报错
+			if (body.isTruncated() && statusCode >= 200 && statusCode < 300) {
+				throw new FeignAuthTokenException("Token response exceeds " + MAX_RESPONSE_BODY_BYTES
+						+ " bytes, cannot be a valid token response");
+			}
+			return this.responseParser.parse(statusCode, body.getText(), auth.getExpireAheadSeconds(),
+					auth.getTokenField(), auth.getTokenExpiresInSeconds());
 		}
 		catch (IOException ex) {
 			throw new FeignAuthTokenException("Token request failed: " + ex.getMessage(), ex);
 		}
+	}
+
+	// 读满上限即停：未读完的正文留在流上，响应关闭时连接直接丢弃
+	private static ResponseBody readBody(InputStream in, Charset charset) throws IOException {
+		ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+		byte[] chunk = new byte[8192];
+		boolean truncated = false;
+		int read;
+		while ((read = in.read(chunk)) != -1) {
+			int room = MAX_RESPONSE_BODY_BYTES - buffer.size();
+			if (read > room) {
+				if (room > 0) {
+					buffer.write(chunk, 0, room);
+				}
+				truncated = true;
+				break;
+			}
+			buffer.write(chunk, 0, read);
+		}
+		return new ResponseBody(new String(buffer.toByteArray(), charset), truncated);
+	}
+
+	private static final class ResponseBody {
+
+		private final String text;
+
+		private final boolean truncated;
+
+		private ResponseBody(String text, boolean truncated) {
+			this.text = text;
+			this.truncated = truncated;
+		}
+
+		private String getText() {
+			return this.text;
+		}
+
+		private boolean isTruncated() {
+			return this.truncated;
+		}
+
 	}
 
 	// 响应声明的字符集优先，未声明或无法解析按 UTF-8。必须用 lenient：strict 版对不认识的
