@@ -66,8 +66,12 @@ public class FeignAuthRequestInterceptor implements RequestInterceptor {
             targetPathPrefix = "";
         }
 
+        // 必须与 FeignAuthStatusHandler 侧收敛到同一个路径字符串：Feign 自己拼接 target 前缀与
+        // 方法路径时只去掉一个末尾斜杠、也不折叠 //，直接比较会得到两个不同的路径，
+        // 于是 4xx 时匹配不到同一服务，既不驱逐缓存也不重放
         String methodPath = PathUtils.normalizePath(template.path());
-        String requestPath = StringUtils.isNotBlank(targetPathPrefix) ? targetPathPrefix + methodPath : methodPath;
+        String requestPath = PathUtils.normalizeRequestPath(
+            StringUtils.isNotBlank(targetPathPrefix) ? targetPathPrefix + methodPath : methodPath);
 
         ResolvedService resolved = this.serviceMatcher.match(baseUrl, requestPath);
         if (resolved == null) {

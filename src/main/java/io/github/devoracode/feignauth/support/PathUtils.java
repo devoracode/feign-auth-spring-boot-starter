@@ -64,6 +64,59 @@ public final class PathUtils {
 	}
 
 	/**
+	 * 归一化用于匹配的请求路径：在 {@link #normalizePath(String)} 的基础上折叠重复的 {@code /}，
+	 * 并去掉末尾斜杠（根路径 {@code /} 例外保留）。
+	 *
+	 * <p><b>为什么需要它：</b>拦截器侧用「Feign target 前缀 + 方法路径」拼出请求路径，错误解码器侧
+	 * 用最终请求 URL 反推路径，两者受 Feign 自身拼接规则（只去掉一个末尾斜杠、不折叠 {@code //}）
+	 * 影响会产生差异。两侧必须收敛到同一个字符串，否则 4xx 时匹配不到同一服务，既不驱逐缓存也不重放。
+	 *
+	 * <p><b>示例：</b></p>
+	 * <pre>{@code
+	 * PathUtils.normalizeRequestPath("/api//measure/1")  // "/api/measure/1"
+	 * PathUtils.normalizeRequestPath("/api/measure/")     // "/api/measure"
+	 * PathUtils.normalizeRequestPath("api/measure?x=1")   // "/api/measure"
+	 * PathUtils.normalizeRequestPath("/")                 // "/"
+	 * PathUtils.normalizeRequestPath("//")                // "/"
+	 * PathUtils.normalizeRequestPath("")                  // ""
+	 * PathUtils.normalizeRequestPath(null)                // ""
+	 * }</pre>
+	 *
+	 * @param path 原始请求路径
+	 * @return 归一化后的路径；{@code path} 为空白时返回空字符串
+	 * @since 1.19.0
+	 */
+	public static String normalizeRequestPath(String path) {
+		String normalized = normalizePath(path);
+		if (normalized.isEmpty()) {
+			return normalized;
+		}
+		int fragmentIndex = normalized.indexOf('#');
+		if (fragmentIndex >= 0) {
+			normalized = normalized.substring(0, fragmentIndex);
+		}
+		StringBuilder collapsed = new StringBuilder(normalized.length());
+		boolean previousWasSlash = false;
+		for (int i = 0; i < normalized.length(); i++) {
+			char current = normalized.charAt(i);
+			if (current == '/') {
+				if (previousWasSlash) {
+					continue;
+				}
+				previousWasSlash = true;
+			}
+			else {
+				previousWasSlash = false;
+			}
+			collapsed.append(current);
+		}
+		if (collapsed.length() > 1 && collapsed.charAt(collapsed.length() - 1) == '/') {
+			collapsed.setLength(collapsed.length() - 1);
+		}
+		return collapsed.toString();
+	}
+
+	/**
 	 * 比较两个基础 URL 是否相等，忽略末尾斜杠与大小写差异。
 	 *
 	 * <p><b>示例：</b></p>

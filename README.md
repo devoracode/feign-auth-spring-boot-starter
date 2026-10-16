@@ -200,6 +200,10 @@ feign:
 4. OAuth2 服务内部：先按 Client 的 `path-prefixes` 匹配，无命中时使用默认 Client（无 `path-prefixes` 的 Client）
 5. 路径命中长度相同时，抛出配置冲突异常，需消除歧义
 
+**请求路径口径：** 参与匹配的请求路径统一由 `PathUtils.normalizeRequestPath` 归一化——补全开头的 `/`、去掉查询串与 `#` 片段、折叠连续斜杠（`//` → `/`）、去掉末尾斜杠（根路径 `/` 保留）。鉴权头注入与过期令牌驱逐两侧都走这一口径，因此 `base-url: https://api.x.com/api//` 这类写法或 `{}` 变量展开出的多余斜杠，不会出现「头注入了 A Client 的令牌、驱逐时却去找另一个 Client」的错配。
+
+> **已知边界：** 若使用方自己的 `RequestInterceptor` 在本 starter 之前改写了 `template.target(...)`（把请求指向别的 host 或前缀），归一化只能消除斜杠差异，无法消除「改写」差异——这类请求仍表现为「不驱逐、不重放」。
+
 **兜底条件：**
 
 - API Key：`auth.path-prefixes` 为空

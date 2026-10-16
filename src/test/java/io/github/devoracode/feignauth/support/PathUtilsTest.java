@@ -45,6 +45,17 @@ class PathUtilsTest {
 	}
 
 	@Test
+	void collapsesRepeatedSlashesAndDropsTrailingSlashForMatching() {
+		assertThat(PathUtils.normalizeRequestPath("/api//measure/read/1")).isEqualTo("/api/measure/read/1");
+		assertThat(PathUtils.normalizeRequestPath("/api/measure/")).isEqualTo("/api/measure");
+		assertThat(PathUtils.normalizeRequestPath("api/measure?x=1")).isEqualTo("/api/measure");
+		assertThat(PathUtils.normalizeRequestPath("/")).isEqualTo("/");
+		assertThat(PathUtils.normalizeRequestPath("//")).isEqualTo("/");
+		assertThat(PathUtils.normalizeRequestPath("")).isEmpty();
+		assertThat(PathUtils.normalizeRequestPath(null)).isEmpty();
+	}
+
+	@Test
 	void normalizesAuthorityWithDefaultPortsAndLowercase() {
 		assertThat(PathUtils.normalizeBaseUrlAuthority("https://API.example.com")).isEqualTo("https://api.example.com:443");
 		assertThat(PathUtils.normalizeBaseUrlAuthority("https://api.example.com:443/")).isEqualTo("https://api.example.com:443");

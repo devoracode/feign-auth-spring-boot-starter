@@ -164,6 +164,23 @@ class FeignAuthRequestInterceptorTest {
 			() -> interceptor.apply(template)).getMessage()).contains("auth.type");
 	}
 
+	@Test
+	void apiKeyHeaderAppliedWhenMethodPathCarriesRepeatedSlashes() {
+		FeignAuthProperties.Service service = service("api-key", auth -> {
+			auth.setHeaderName("Authorization");
+			auth.setValue("sk-test");
+			auth.setPathPrefixes(Collections.singletonList("/api/orders"));
+		});
+
+		RequestTemplate template = template("https://api.example.com", "/api//orders/1");
+		FeignAuthRequestInterceptor interceptor = interceptorWith(service, null);
+
+		interceptor.apply(template);
+
+		// 与 FeignAuthStatusHandler 侧同一口径：不折叠重复斜杠这里就匹配不到 /api/orders，请求会裸发
+		assertThat(template.headers().get("Authorization")).containsExactly("sk-test");
+	}
+
 	private static FeignAuthRequestInterceptor interceptorWith(FeignAuthProperties.Service service,
 			TokenFetcher tokenFetcher) {
 		FeignAuthProperties properties = new FeignAuthProperties();

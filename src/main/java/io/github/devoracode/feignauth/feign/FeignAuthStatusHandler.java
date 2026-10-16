@@ -262,10 +262,22 @@ final class FeignAuthStatusHandler {
 			if (request == null || StringUtils.isBlank(request.url())) {
 				return null;
 			}
-			URI uri = URI.create(request.url());
-			String path = StringUtils.isNotBlank(uri.getRawPath()) ? uri.getRawPath() : "";
-			return new ResolvedRequest(uri.getScheme() + "://" + uri.getAuthority(),
-					PathUtils.normalizePath(path));
+			try {
+				URI uri = URI.create(request.url());
+				String path = StringUtils.isNotBlank(uri.getRawPath()) ? uri.getRawPath() : "";
+				return new ResolvedRequest(uri.getScheme() + "://" + uri.getAuthority(),
+						PathUtils.normalizeRequestPath(path));
+			}
+			catch (RuntimeException ex) {
+				// 最终 URL 无法解析（如路径里含未编码的空格/非 ASCII 字面量）时，不能把一次正常的 4xx
+				// 变成解析异常：返回 null 走「未匹配服务」分支，仍会抛出 FeignAuthTokenException，
+				// 只是不做令牌驱逐与重放
+				if (logger.isWarnEnabled()) {
+					logger.warn("FeignAuth: cannot parse request url '" + request.url()
+							+ "' for expired-token check: " + ex.getMessage());
+				}
+				return null;
+			}
 		}
 
 	}

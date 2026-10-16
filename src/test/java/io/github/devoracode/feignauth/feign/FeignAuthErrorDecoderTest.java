@@ -72,6 +72,49 @@ class FeignAuthErrorDecoderTest {
 	}
 
 	@Test
+	void evictsTokenWhenFinalUrlContainsRepeatedSlashes() {
+		FeignAuthProperties properties = new FeignAuthProperties();
+		properties.setServices(new LinkedHashMap<>());
+		properties.getServices().put("measure", oauth2Service("https://api.service-a.com",
+				client("telemetry", "/api/measure"), client("default")));
+
+		CountingTokenRequestClient tokenRequestClient = new CountingTokenRequestClient();
+		TokenFetcher tokenFetcher = new TokenFetcher(properties, new OAuth2ClientMatcher(), tokenRequestClient,
+				new LocalTokenStore(), new LocalLockProvider());
+		FeignAuthErrorDecoder decoder = new FeignAuthErrorDecoder(new ServiceMatcher(properties), tokenFetcher, objectMapper);
+
+		assertThat(tokenFetcher.getToken("measure", "/api/measure/read/1")).isEqualTo("token-1");
+
+		Exception exception = decoder.decode("MeasureClient#getReading",
+				response(401, "https://api.service-a.com/api//measure/read/1"));
+
+		// 修复前这条 URL 匹配不到 telemetry，会落到 default client 的缓存键上空转
+		assertThat(exception).isInstanceOf(RetryableException.class);
+		assertThat(tokenFetcher.getToken("measure", "/api/measure/read/1")).isEqualTo("token-2");
+		assertThat(tokenRequestClient.getRequestCount()).isEqualTo(2);
+	}
+
+	@Test
+	void unparsableRequestUrlFallsBackToPlainErrorInsteadOfThrowing() {
+		FeignAuthProperties properties = new FeignAuthProperties();
+		properties.setServices(new LinkedHashMap<>());
+		properties.getServices().put("measure", oauth2Service("https://api.service-a.com",
+				client("telemetry", "/api/measure"), client("default")));
+
+		CountingTokenRequestClient tokenRequestClient = new CountingTokenRequestClient();
+		TokenFetcher tokenFetcher = new TokenFetcher(properties, new OAuth2ClientMatcher(), tokenRequestClient,
+				new LocalTokenStore(), new LocalLockProvider());
+		FeignAuthErrorDecoder decoder = new FeignAuthErrorDecoder(new ServiceMatcher(properties), tokenFetcher, objectMapper);
+
+		Exception exception = decoder.decode("MeasureClient#getReading",
+				response(401, "https://api.service-a.com/api/measure/read/1 2"));
+
+		// 修复前这里抛的是 URI.create 的 IllegalArgumentException
+		assertThat(exception).isInstanceOf(FeignAuthTokenException.class);
+		assertThat(exception instanceof RetryableException).isFalse();
+	}
+
+	@Test
 	void repeatedExpiredTokenWithinCooldownPropagatesOriginalErrorWithoutRetry() throws Exception {
 		FeignAuthProperties properties = new FeignAuthProperties();
 		properties.setServices(new LinkedHashMap<>());
