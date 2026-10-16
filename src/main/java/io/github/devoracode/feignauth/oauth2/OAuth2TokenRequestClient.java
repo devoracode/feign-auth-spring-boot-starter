@@ -176,9 +176,10 @@ public class OAuth2TokenRequestClient implements AutoCloseable {
 		}
 	}
 
-	// 响应声明的字符集优先，未声明（或无法解析）按 UTF-8
+	// 响应声明的字符集优先，未声明或无法解析按 UTF-8。必须用 lenient：strict 版对不认识的
+	// charset 抛 UnsupportedCharsetException，属 RuntimeException，逃过本方法 IOException 兜底
 	private static Charset resolveResponseCharset(HttpEntity entity) {
-		ContentType contentType = ContentType.get(entity);
+		ContentType contentType = ContentType.getLenient(entity);
 		if (contentType != null && contentType.getCharset() != null) {
 			return contentType.getCharset();
 		}

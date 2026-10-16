@@ -140,6 +140,28 @@ class OAuth2TokenRequestClientTest {
 	}
 
 	@Test
+	void unknownCharsetInResponseContentTypeFallsBackToUtf8() {
+		this.server.createContext("/token", exchange -> {
+			try {
+				byte[] bytes = "{\"access_token\":\"令牌-α\",\"expires_in\":600}".getBytes(StandardCharsets.UTF_8);
+				// UTF-9 在本 JVM 不存在，等价于 IdP/网关声明了无法解析的字符集
+				exchange.getResponseHeaders().add("Content-Type", "application/json;charset=UTF-9");
+				exchange.sendResponseHeaders(200, bytes.length);
+				try (OutputStream os = exchange.getResponseBody()) {
+					os.write(bytes);
+				}
+			}
+			catch (IOException ex) {
+				// ignore
+			}
+		});
+
+		OAuth2TokenRequestClient client = createClient(new FeignAuthProperties.Http());
+		OAuth2AccessToken token = client.requestToken("svc", service(this.tokenUrl), clientCredentials());
+		assertThat(token.getAccessToken()).isEqualTo("令牌-α");
+	}
+
+	@Test
 	void non2xxResponseBodyReachesExceptionFromClientSide() {
 		this.server.createContext("/token",
 				exchange -> respond(exchange, 400,
