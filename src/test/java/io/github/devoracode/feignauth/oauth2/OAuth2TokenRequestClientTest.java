@@ -8,6 +8,19 @@ import io.github.devoracode.feignauth.exception.FeignAuthConfigurationException;
 import io.github.devoracode.feignauth.exception.FeignAuthTokenException;
 import io.github.devoracode.feignauth.feign.LogCaptures;
 import io.github.devoracode.feignauth.header.HeaderManager;
+import org.apache.http.HttpHost;
+import org.apache.http.HttpRequest;
+import org.apache.http.HttpVersion;
+import org.apache.http.client.methods.CloseableHttpResponse;
+import org.apache.http.conn.ClientConnectionManager;
+import org.apache.http.entity.AbstractHttpEntity;
+import org.apache.http.entity.ContentType;
+import org.apache.http.entity.StringEntity;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.message.BasicHttpResponse;
+import org.apache.http.message.BasicStatusLine;
+import org.apache.http.params.HttpParams;
+import org.apache.http.protocol.HttpContext;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -516,6 +529,62 @@ class OAuth2TokenRequestClientTest {
 		}
 	}
 
+	@Test
+	void responseCloseFailureAfterAParsedTokenKeepsTheTokenAndOnlyWarns() {
+		LogCaptures logs = LogCaptures.attach(OAuth2TokenRequestClient.class);
+		try {
+			OAuth2TokenRequestClient client = clientReturning(tokenResponse(200), null);
+
+			// 令牌已经解析到手，归还连接时再出问题只该提醒，不该把取号结果一起作废
+			OAuth2AccessToken token = client.requestToken("svc", service(this.tokenUrl), clientCredentials());
+
+			assertThat(token.getAccessToken()).isEqualTo("t");
+			assertThat(logs.contains(Level.WARN, "Failed to close token response")).isTrue();
+			assertThat(logs.count(Level.WARN)).isEqualTo(1L);
+		}
+		finally {
+			logs.detach();
+		}
+	}
+
+	@Test
+	void transportFailureStillFailsTheTokenRequest() {
+		OAuth2TokenRequestClient client = clientReturning(null, new IOException("connection refused"));
+
+		assertThatThrownBy(() -> client.requestToken("svc", service(this.tokenUrl), clientCredentials()))
+				.isInstanceOf(FeignAuthTokenException.class)
+				.hasStackTraceContaining("Token request failed: connection refused");
+	}
+
+	@Test
+	void bodyReadFailureKeepsItsOwnCauseWhenCloseAlsoFails() {
+		LogCaptures logs = LogCaptures.attach(OAuth2TokenRequestClient.class);
+		try {
+			FaultyCloseResponse response = tokenResponse(200);
+			response.setEntity(new UnreadableEntity());
+			OAuth2TokenRequestClient client = clientReturning(response, null);
+
+			// 读正文先失败时，主因仍是读失败；close 的那条只能进日志，不能顶替或改写它
+			assertThatThrownBy(() -> client.requestToken("svc", service(this.tokenUrl), clientCredentials()))
+					.isInstanceOf(FeignAuthTokenException.class)
+					.hasStackTraceContaining("Token request failed: body stream broke halfway");
+			assertThat(logs.contains(Level.WARN, "Failed to close token response")).isTrue();
+		}
+		finally {
+			logs.detach();
+		}
+	}
+
+	@Test
+	void errorResponseIsStillDescribedWhenCloseFails() {
+		OAuth2TokenRequestClient client = clientReturning(tokenResponse(500), null);
+
+		// 非 2xx 由解析器给出原因，close 失败不参与结果
+		assertThatThrownBy(() -> client.requestToken("svc", service(this.tokenUrl), clientCredentials()))
+				.isInstanceOf(FeignAuthTokenException.class)
+				.hasStackTraceContaining("Token request failed: 500");
+	}
+
 	private static void probeTokenRequest(OAuth2TokenRequestClient client, String serviceName,
 			FeignAuthProperties.Service service) {
 		try {
@@ -557,6 +626,104 @@ class OAuth2TokenRequestClientTest {
 		private String authorization;
 
 		private String body;
+
+	}
+
+	private OAuth2TokenRequestClient clientReturning(CloseableHttpResponse response, IOException transportFailure) {
+		return new OAuth2TokenRequestClient(new OAuth2TokenResponseParser(new ObjectMapper()), new HeaderManager(),
+				new ObjectMapper(), new StubHttpClient(response, transportFailure));
+	}
+
+	private static FaultyCloseResponse tokenResponse(int status) {
+		FaultyCloseResponse response = new FaultyCloseResponse(status);
+		response.setEntity(new StringEntity("{\"access_token\":\"t\",\"expires_in\":600}", ContentType.APPLICATION_JSON));
+		return response;
+	}
+
+	// 无论取号结果如何都要抛出的 close()，用来验证响应归还失败不改变结果
+	private static final class FaultyCloseResponse extends BasicHttpResponse implements CloseableHttpResponse {
+
+		private FaultyCloseResponse(int status) {
+			super(new BasicStatusLine(HttpVersion.HTTP_1_1, status, "stub"));
+		}
+
+		@Override
+		public void close() throws IOException {
+			throw new IOException("connection is being destroyed");
+		}
+
+	}
+
+	private static final class UnreadableEntity extends AbstractHttpEntity {
+
+		@Override
+		public boolean isRepeatable() {
+			return false;
+		}
+
+		@Override
+		public long getContentLength() {
+			return -1L;
+		}
+
+		@Override
+		public InputStream getContent() {
+			return new InputStream() {
+				@Override
+				public int read() throws IOException {
+					throw new IOException("body stream broke halfway");
+				}
+			};
+		}
+
+		@Override
+		public boolean isStreaming() {
+			return true;
+		}
+
+		@Override
+		public void writeTo(OutputStream outStream) {
+			throw new UnsupportedOperationException();
+		}
+
+	}
+
+	private static final class StubHttpClient extends CloseableHttpClient {
+
+		private final CloseableHttpResponse response;
+
+		private final IOException transportFailure;
+
+		private StubHttpClient(CloseableHttpResponse response, IOException transportFailure) {
+			this.response = response;
+			this.transportFailure = transportFailure;
+		}
+
+		@Override
+		protected CloseableHttpResponse doExecute(HttpHost target, HttpRequest request, HttpContext context)
+				throws IOException {
+			if (this.transportFailure != null) {
+				throw this.transportFailure;
+			}
+			return this.response;
+		}
+
+		@Override
+		public void close() {
+			// 这里没有连接池要关
+		}
+
+		@Override
+		@SuppressWarnings("deprecation")
+		public ClientConnectionManager getConnectionManager() {
+			return null;
+		}
+
+		@Override
+		@SuppressWarnings("deprecation")
+		public HttpParams getParams() {
+			return null;
+		}
 
 	}
 

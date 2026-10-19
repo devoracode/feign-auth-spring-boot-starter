@@ -85,6 +85,19 @@ public class OAuth2TokenRequestClient implements AutoCloseable {
 		this.objectMapper = objectMapper;
 	}
 
+	// 测试缝：连接层可替换，用于验证响应关闭失败不会作废已解析的令牌
+	OAuth2TokenRequestClient(OAuth2TokenResponseParser responseParser, HeaderManager headerManager,
+			ObjectMapper objectMapper, CloseableHttpClient httpClient) {
+		Assert.notNull(responseParser, "responseParser must not be null");
+		Assert.notNull(headerManager, "headerManager must not be null");
+		Assert.notNull(objectMapper, "objectMapper must not be null");
+		Assert.notNull(httpClient, "httpClient must not be null");
+		this.httpClient = httpClient;
+		this.responseParser = responseParser;
+		this.headerManager = headerManager;
+		this.objectMapper = objectMapper;
+	}
+
 	/**
 	 * 为给定服务与 Client 请求新的 OAuth2 访问令牌。
 	 * @param serviceName 逻辑服务名
@@ -293,7 +306,9 @@ public class OAuth2TokenRequestClient implements AutoCloseable {
 	}
 
 	private OAuth2AccessToken execute(HttpUriRequest request, FeignAuthProperties.Auth auth) {
-		try (CloseableHttpResponse response = this.httpClient.execute(request)) {
+		CloseableHttpResponse response = null;
+		try {
+			response = this.httpClient.execute(request);
 			int statusCode = response.getStatusLine().getStatusCode();
 			HttpEntity entity = response.getEntity();
 			ResponseBody body = entity == null ? new ResponseBody(null, false)
@@ -308,6 +323,23 @@ public class OAuth2TokenRequestClient implements AutoCloseable {
 		}
 		catch (IOException ex) {
 			throw new FeignAuthTokenException("Token request failed: " + ex.getMessage(), ex);
+		}
+		finally {
+			closeResponse(response);
+		}
+	}
+
+	// 归还连接失败不该改写取号结果：正文已交解析器时令牌是有效的，请求本身失败时主因也已经抛出，
+	// 这里只补一条 WARN，避免连接层的噪音盖掉真实原因
+	private static void closeResponse(CloseableHttpResponse response) {
+		if (response == null) {
+			return;
+		}
+		try {
+			response.close();
+		}
+		catch (IOException ex) {
+			logger.warn("Failed to close token response: " + ex.getMessage(), ex);
 		}
 	}
 
