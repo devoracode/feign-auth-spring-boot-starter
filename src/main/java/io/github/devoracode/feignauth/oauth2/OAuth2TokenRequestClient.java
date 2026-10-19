@@ -117,7 +117,7 @@ public class OAuth2TokenRequestClient implements AutoCloseable {
 					"OAuth2 client id and secret are required for service baseUrl=" + service.getBaseUrl());
 		}
 		Map<String, String> parameters = buildTokenRequestParameters(auth, client);
-		String method = auth.getMethod() == null ? "post" : auth.getMethod().trim().toLowerCase();
+		String method = auth.getMethod() == null ? "post" : auth.getMethod().trim().toLowerCase(Locale.ROOT);
 		boolean credentialsInParameters = credentialsInParameters(auth, method);
 		if (credentialsInParameters && "get".equals(method)) {
 			warnCredentialsInQuery(serviceName);
