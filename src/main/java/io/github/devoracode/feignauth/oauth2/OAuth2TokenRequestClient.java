@@ -10,9 +10,6 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.http.HttpEntity;
-import org.apache.http.NameValuePair;
-import org.apache.http.ParseException;
-import org.apache.http.client.entity.UrlEncodedFormEntity;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
@@ -20,23 +17,18 @@ import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.methods.HttpUriRequest;
 import org.apache.http.client.utils.URIBuilder;
 import org.apache.http.entity.ContentType;
-import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
-import org.apache.http.message.BasicNameValuePair;
 import org.springframework.http.HttpHeaders;
 import org.springframework.util.Assert;
 
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
@@ -63,7 +55,7 @@ public class OAuth2TokenRequestClient implements AutoCloseable {
 
 	private final HeaderManager headerManager;
 
-	private final ObjectMapper objectMapper;
+	private final TokenRequestContentTypeResolver contentTypeResolver;
 
 	// 取号是可能反复发生的路径（令牌过期、被驱逐），同一原因的 WARN 只记一次
 	private final Set<String> warnedOnce = ConcurrentHashMap.newKeySet();
@@ -77,7 +69,7 @@ public class OAuth2TokenRequestClient implements AutoCloseable {
 		this.httpClient = createHttpClient(http);
 		this.responseParser = responseParser;
 		this.headerManager = headerManager;
-		this.objectMapper = objectMapper;
+		this.contentTypeResolver = new TokenRequestContentTypeResolver(objectMapper);
 	}
 
 	// 测试缝：连接层可替换，用于验证响应关闭失败不会作废已解析的令牌
@@ -90,7 +82,7 @@ public class OAuth2TokenRequestClient implements AutoCloseable {
 		this.httpClient = httpClient;
 		this.responseParser = responseParser;
 		this.headerManager = headerManager;
-		this.objectMapper = objectMapper;
+		this.contentTypeResolver = new TokenRequestContentTypeResolver(objectMapper);
 	}
 
 	/**
@@ -163,11 +155,11 @@ public class OAuth2TokenRequestClient implements AutoCloseable {
 			applyClientSecretBasic(headers, serviceName, client);
 		}
 
-		ContentType contentType = resolveTokenRequestContentType(headers);
+		ContentType contentType = this.contentTypeResolver.resolve(headers);
 
 		HttpPost request = new HttpPost(parseTokenUrl(serviceName, auth));
 		copyHeaders(headers, request);
-		request.setEntity(buildRequestEntity(contentType, parameters));
+		request.setEntity(this.contentTypeResolver.buildEntity(contentType, parameters));
 		return execute(request, auth);
 	}
 
@@ -262,44 +254,6 @@ public class OAuth2TokenRequestClient implements AutoCloseable {
 				|| host.startsWith("127.");
 	}
 
-	// 配置的 Content-Type 决定请求体编码方案，避免头体错配；未配置默认 JSON
-	private static ContentType resolveTokenRequestContentType(HttpHeaders headers) {
-		String configured = headers.getFirst(HttpHeaders.CONTENT_TYPE);
-		if (StringUtils.isBlank(configured)) {
-			return ContentType.APPLICATION_JSON;
-		}
-		ContentType contentType;
-		try {
-			contentType = ContentType.parse(configured);
-		}
-		// ParseException 也是 RuntimeException：`;`、`,` 这类被拆成空元素的值只抛它，不一起接住就绕过下面的快速失败
-		catch (IllegalArgumentException | ParseException ex) {
-			contentType = null;
-		}
-		if (contentType == null) {
-			throw new FeignAuthConfigurationException("Invalid Content-Type in token-request-headers: '" + configured + "'");
-		}
-		String mimeType = contentType.getMimeType().toLowerCase(Locale.ROOT);
-		boolean json = mimeType.endsWith("/json") || mimeType.endsWith("+json");
-		boolean form = ContentType.APPLICATION_FORM_URLENCODED.getMimeType().equals(mimeType);
-		if (!json && !form) {
-			throw new FeignAuthConfigurationException("Unsupported OAuth2 token request Content-Type: '" + configured
-					+ "', expected application/json or application/x-www-form-urlencoded");
-		}
-		return contentType;
-	}
-
-	private HttpEntity buildRequestEntity(ContentType contentType, Map<String, String> parameters) {
-		if (ContentType.APPLICATION_FORM_URLENCODED.getMimeType().equalsIgnoreCase(contentType.getMimeType())) {
-			List<NameValuePair> pairs = new ArrayList<>();
-			parameters.forEach((name, value) -> pairs.add(new BasicNameValuePair(name, value)));
-			return new UrlEncodedFormEntity(pairs, StandardCharsets.UTF_8);
-		}
-		Charset charset = contentType.getCharset();
-		return new StringEntity(writeJson(parameters), charset != null ? contentType
-				: contentType.withCharset(StandardCharsets.UTF_8));
-	}
-
 	private OAuth2AccessToken execute(HttpUriRequest request, FeignAuthProperties.Auth auth) {
 		CloseableHttpResponse response = null;
 		try {
@@ -336,15 +290,6 @@ public class OAuth2TokenRequestClient implements AutoCloseable {
 		}
 		catch (IOException ex) {
 			logger.warn("Failed to close token response: " + ex.getMessage(), ex);
-		}
-	}
-
-	private String writeJson(Map<String, String> parameters) {
-		try {
-			return this.objectMapper.writeValueAsString(parameters);
-		}
-		catch (IOException ex) {
-			throw new FeignAuthTokenException("Serialize token request failed", ex);
 		}
 	}
 
