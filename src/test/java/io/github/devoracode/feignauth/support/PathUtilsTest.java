@@ -76,4 +76,48 @@ class PathUtilsTest {
 		assertThat(PathUtils.baseUrlPath(null)).isEmpty();
 	}
 
+	@Test
+	void authorityAndBasePathFallBackIndependently() {
+		// 相对 URL 解析成功但没有 authority，路径段照样取得到：两个派生值的回退各自独立
+		assertThat(PathUtils.normalizeBaseUrlAuthority("orders")).isNull();
+		assertThat(PathUtils.baseUrlPath("orders")).isEqualTo("/orders");
+
+		assertThat(PathUtils.normalizeBaseUrlAuthority("   ")).isNull();
+		assertThat(PathUtils.baseUrlPath("   ")).isEmpty();
+
+		// URI.create 失败的输入两半都只落到自己的回退值，不抛异常
+		assertThat(PathUtils.normalizeBaseUrlAuthority("http://exa mple.com/v1")).isNull();
+		assertThat(PathUtils.baseUrlPath("http://exa mple.com/v1")).isEmpty();
+
+		// 首尾空白在解析前被 trim 掉
+		assertThat(PathUtils.normalizeBaseUrlAuthority(" https://API.example.com/v1 "))
+				.isEqualTo("https://api.example.com:443");
+		assertThat(PathUtils.baseUrlPath(" https://API.example.com/v1 ")).isEqualTo("/v1");
+
+		// 有 authority 但没有路径段
+		assertThat(PathUtils.normalizeBaseUrlAuthority("https://api.example.com?x=1"))
+				.isEqualTo("https://api.example.com:443");
+		assertThat(PathUtils.baseUrlPath("https://api.example.com?x=1")).isEmpty();
+	}
+
+	@Test
+	void parseBaseUrlAgreesWithBothSingleValueWrappers() {
+		List<String> urls = Arrays.asList("https://api.example.com/v1/", "https://API.example.com:443/",
+				"http://localhost", "http://localhost:8080/x", "orders", "my-service", "   ", null,
+				"http://exa mple.com/v1", "https://api.example.com", "https://api.example.com/api//v1/",
+				" https://API.example.com/v1 ", "https://api.example.com?x=1");
+
+		for (String url : urls) {
+			PathUtils.BaseUrlParts parts = PathUtils.parseBaseUrl(url);
+			// 两个既有方法现在只是 parseBaseUrl 的薄封装，逐输入比对新旧口径必须完全一致
+			assertThat(parts.getAuthority()).isEqualTo(PathUtils.normalizeBaseUrlAuthority(url));
+			assertThat(parts.getBasePath()).isEqualTo(PathUtils.baseUrlPath(url));
+		}
+
+		assertThat(PathUtils.parseBaseUrl("   ")).isSameAs(PathUtils.BaseUrlParts.EMPTY);
+		assertThat(PathUtils.parseBaseUrl("http://exa mple.com/v1")).isSameAs(PathUtils.BaseUrlParts.EMPTY);
+		assertThat(PathUtils.BaseUrlParts.EMPTY.getAuthority()).isNull();
+		assertThat(PathUtils.BaseUrlParts.EMPTY.getBasePath()).isEmpty();
+	}
+
 }

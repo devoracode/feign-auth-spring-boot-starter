@@ -187,21 +187,21 @@ class ServiceMatcherTest {
 	void urlDerivedValuesAreMemoizedUpToTheCap() throws Exception {
 		ServiceMatcher matcher = new ServiceMatcher(properties(
 				service("order", "https://api.example.com", "api-key", "/api/orders")));
-		ConcurrentMap<?, ?> authorityCache = cache(matcher, "authorityCache");
+		ConcurrentMap<?, ?> urlCache = cache(matcher, "urlCache");
 
 		matcher.match("https://api.example.com", "/api/orders/1");
-		int afterFirstRequest = authorityCache.size();
+		int afterFirstRequest = urlCache.size();
 		matcher.match("https://api.example.com", "/api/orders/2");
 
 		// 同一 URL 重复请求不再重新解析，也不会往缓存里追加条目
-		assertThat(authorityCache).hasSize(afterFirstRequest);
+		assertThat(urlCache).hasSize(afterFirstRequest);
 		assertThat(afterFirstRequest).isPositive();
 
 		// 动态 target URL 不该让缓存无界增长
 		for (int i = 0; i < EXPECTED_URL_CACHE_CAP + 50; i++) {
 			matcher.match("https://host-" + i + ".example.com", "/api/orders/1");
 		}
-		assertThat(authorityCache).hasSize(EXPECTED_URL_CACHE_CAP);
+		assertThat(urlCache).hasSize(EXPECTED_URL_CACHE_CAP);
 	}
 
 	// 记忆化与缓存上限都无对外契约（重解析与走缓存结果相同），只能反射读内部 map 钉住；
