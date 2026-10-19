@@ -40,7 +40,7 @@
     {
       "name": "feign-auth.services.*.auth.token-url",
       "type": "java.lang.String",
-      "description": "OAuth2 token endpoint URL. Use https: a plain http endpoint sends client credentials and the issued token in clear text (the starter logs one WARN per authority, loopback addresses excepted)."
+      "description": "OAuth2 token endpoint URL. Use https: a plain http endpoint sends client credentials and the issued token in clear text (the starter logs one WARN per service, loopback addresses excepted)."
     },
     {
       "name": "feign-auth.services.*.auth.method",

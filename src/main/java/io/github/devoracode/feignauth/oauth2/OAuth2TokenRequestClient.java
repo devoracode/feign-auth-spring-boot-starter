@@ -134,7 +134,7 @@ public class OAuth2TokenRequestClient implements AutoCloseable {
 
 		URI uri;
 		try {
-			URIBuilder builder = new URIBuilder(parseTokenUrl(auth));
+			URIBuilder builder = new URIBuilder(parseTokenUrl(serviceName, auth));
 			parameters.forEach(builder::addParameter);
 			uri = builder.build();
 		}
@@ -157,7 +157,7 @@ public class OAuth2TokenRequestClient implements AutoCloseable {
 
 		ContentType contentType = resolveTokenRequestContentType(headers);
 
-		HttpPost request = new HttpPost(parseTokenUrl(auth));
+		HttpPost request = new HttpPost(parseTokenUrl(serviceName, auth));
 		copyHeaders(headers, request);
 		request.setEntity(buildRequestEntity(contentType, parameters));
 		return execute(request, auth);
@@ -217,7 +217,7 @@ public class OAuth2TokenRequestClient implements AutoCloseable {
 
 	// GET/POST 共用：POST 分支此前把原始字符串交给 HttpPost(String)，非法 URL 抛的是 URI.create 的
 	// IllegalArgumentException，消息里既没有配置键、也看不出问题出在 token-url
-	private URI parseTokenUrl(FeignAuthProperties.Auth auth) {
+	private URI parseTokenUrl(String serviceName, FeignAuthProperties.Auth auth) {
 		String tokenUrl = auth.getTokenUrl();
 		URI uri;
 		try {
@@ -226,20 +226,22 @@ public class OAuth2TokenRequestClient implements AutoCloseable {
 		catch (URISyntaxException ex) {
 			throw new FeignAuthConfigurationException("Invalid token-url: " + tokenUrl);
 		}
-		warnIfInsecureTokenUrl(uri);
+		warnIfInsecureTokenUrl(serviceName, uri);
 		return uri;
 	}
 
-	// 非 https 的 token-url 会让 client_secret 与返回的令牌明文过网：按 authority 提示一次。
+	// 非 https 的 token-url 会让 client_secret 与返回的令牌明文过网：按服务提示一次，便于定位是哪条配置。
+	// 同一服务下的多个 Client 共用一个 token-url，因此每服务实际只提醒一次。
 	// 回环地址是本地开发的正常用法，不提示
-	private void warnIfInsecureTokenUrl(URI uri) {
+	private void warnIfInsecureTokenUrl(String serviceName, URI uri) {
 		String scheme = uri.getScheme();
 		if (scheme == null || "https".equalsIgnoreCase(scheme) || isLoopbackHost(uri.getHost())) {
 			return;
 		}
-		if (this.warnedOnce.add("insecure-token-url:" + scheme.toLowerCase(Locale.ROOT) + "://"
-				+ uri.getAuthority())) {
-			logger.warn("FeignAuth: token-url '" + uri + "' is not https; client credentials and access tokens"
+		if (this.warnedOnce.add("insecure-token-url:" + serviceName + ":"
+				+ scheme.toLowerCase(Locale.ROOT) + "://" + uri.getAuthority())) {
+			logger.warn("FeignAuth: token-url '" + uri + "' of service '" + serviceName
+					+ "' is not https; client credentials and access tokens"
 					+ " can be read or modified in transit");
 		}
 	}

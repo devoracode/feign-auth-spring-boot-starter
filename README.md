@@ -176,7 +176,7 @@ GET /oauth/token?grant_type=client_credentials&client_id=<客户端ID>&client_se
 
 ### 凭据与传输安全
 
-**`token-url` 请使用 HTTPS**。配成明文 `http://` 时，`client_secret` 与返回的 access token 都明文过网，同网段中间人可直接取走；客户端凭证一旦泄露，等价于该 Client 的全部权限。starter 会在首次取号时按 authority（host:port）记一次 WARN，回环地址（`localhost`、`127.*`、`::1`）视为本地开发用法不提示。生产环境仍须自行确认 `token-url` 为 HTTPS，且未放宽证书校验——WARN 只是提醒，starter 不会拒发请求。
+**`token-url` 请使用 HTTPS**。配成明文 `http://` 时，`client_secret` 与返回的 access token 都明文过网，同网段中间人可直接取走；客户端凭证一旦泄露，等价于该 Client 的全部权限。starter 会在首次取号时按服务记一次 WARN（同一服务的多个 client 共用一个 `token-url`，因此每服务实际只有一条），回环地址（`localhost`、`127.*`、`::1`）视为本地开发用法不提示。生产环境仍须自行确认 `token-url` 为 HTTPS，且未放宽证书校验——WARN 只是提醒，starter 不会拒发请求。
 
 > 已知边界：`token-url` 缺少协议名（如写成 `127.0.0.1:8080/oauth/token`）时，GET/POST 都在请求期抛 `FeignAuthConfigurationException: Invalid token-url: <原值>`；使用非 HTTP(S) 协议（如 `ftp://`）时，报错仍在请求期且不含配置键——`FeignAuthTokenException: Token request failed: null`。排障时先核对 URL 写法。
 

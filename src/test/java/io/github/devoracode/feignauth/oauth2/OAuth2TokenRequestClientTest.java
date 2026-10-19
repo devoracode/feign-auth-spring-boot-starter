@@ -489,7 +489,7 @@ class OAuth2TokenRequestClientTest {
 	}
 
 	@Test
-	void insecureTokenUrlWarnsOncePerAuthorityAndStaysQuietOnLoopback() {
+	void insecureTokenUrlWarnsOncePerServiceAndStaysQuietOnLoopback() {
 		LogCaptures logs = LogCaptures.attach(OAuth2TokenRequestClient.class);
 		try {
 			OAuth2TokenRequestClient client = createClient(shortTimeoutHttp());
@@ -498,23 +498,28 @@ class OAuth2TokenRequestClientTest {
 			FeignAuthProperties.Service sameAuthority = service("http://192.0.2.1:9/token");
 			FeignAuthProperties.Service otherAuthority = service("http://192.0.2.2:9/token");
 
-			for (FeignAuthProperties.Service candidate : Arrays.asList(first, sameAuthority, otherAuthority)) {
-				probeTokenRequest(client, candidate);
-			}
-			assertThat(logs.count(Level.WARN)).isEqualTo(2L);
+			// 去重键含服务名：同一个 authority 下的两个服务各提醒一次（否则第二个服务的配置无从定位），
+			// 同一服务反复取号只提醒一次
+			probeTokenRequest(client, "alpha", first);
+			probeTokenRequest(client, "beta", sameAuthority);
+			probeTokenRequest(client, "gamma", otherAuthority);
+			probeTokenRequest(client, "gamma", otherAuthority);
+			assertThat(logs.count(Level.WARN)).isEqualTo(3L);
+			assertThat(logs.contains(Level.WARN, "token-url 'http://192.0.2.1:9/token' of service 'beta'")).isTrue();
 
 			// 本地开发的明文回环地址是正常用法，不该刷 WARN
-			probeTokenRequest(client, service(this.tokenUrl));
-			assertThat(logs.count(Level.WARN)).isEqualTo(2L);
+			probeTokenRequest(client, "loopback", service(this.tokenUrl));
+			assertThat(logs.count(Level.WARN)).isEqualTo(3L);
 		}
 		finally {
 			logs.detach();
 		}
 	}
 
-	private static void probeTokenRequest(OAuth2TokenRequestClient client, FeignAuthProperties.Service service) {
+	private static void probeTokenRequest(OAuth2TokenRequestClient client, String serviceName,
+			FeignAuthProperties.Service service) {
 		try {
-			client.requestToken("svc", service, clientCredentials());
+			client.requestToken(serviceName, service, clientCredentials());
 		}
 		catch (Exception ex) {
 			// 本测试只关心取号前发出的 WARN，连不上是预期内的
