@@ -2,6 +2,7 @@ package io.github.devoracode.feignauth.feign;
 
 import io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties;
 import io.github.devoracode.feignauth.exception.FeignAuthConfigurationException;
+import io.github.devoracode.feignauth.support.AuthType;
 import io.github.devoracode.feignauth.support.PathUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.util.Assert;
@@ -74,7 +75,10 @@ public class ServiceMatcher {
 						" (auth config is missing, expected auth.type 'oauth2' or 'api-key')");
 				continue;
 			}
-			if (!auth.isApiKey() && !auth.isOAuth2()) {
+			// 认证类型每个请求只需解析一次，后续判定都用枚举比较：
+			// isApiKey()/isOAuth2() 各自都要重扫一遍枚举，而本方法每个请求都会执行
+			AuthType authType = AuthType.from(auth.getType());
+			if (authType == null) {
 				invalidConfigs = appendInvalidConfig(invalidConfigs, entry.getKey(),
 						" (unsupported auth.type '" + auth.getType() + "', expected 'oauth2' or 'api-key')");
 				continue;
@@ -82,7 +86,7 @@ public class ServiceMatcher {
 			validCandidates++;
 
 			// 配置 base-url 携带的路径段是外层前缀：请求路径落在其下时先剥离再匹配
-			int matchLength = bestPrefixMatchLength(auth,
+			int matchLength = bestPrefixMatchLength(auth, authType,
 					stripConfiguredBasePath(requestPath, basePath(service.getBaseUrl())));
 			if (matchLength > 0) {
 				if (matchLength > bestPrefixLength) {
@@ -192,12 +196,12 @@ public class ServiceMatcher {
 		return requestPath;
 	}
 
-	private static int bestPrefixMatchLength(FeignAuthProperties.Auth auth, String requestPath) {
+	private static int bestPrefixMatchLength(FeignAuthProperties.Auth auth, AuthType authType, String requestPath) {
 		if (StringUtils.isBlank(requestPath)) {
 			return 0;
 		}
 
-		if (auth.isApiKey()) {
+		if (authType == AuthType.API_KEY) {
 			return PathUtils.bestPrefixMatchLength(auth.getPathPrefixes(), requestPath);
 		}
 		if (auth.getClients() == null) {

@@ -154,6 +154,36 @@ class ServiceMatcherTest {
 	}
 
 	@Test
+	void authTypeIsParsedIgnoringCaseAndSurroundingWhitespace() {
+		// 认证类型收敛为每请求解析一次后，大小写与首尾空白变体的判定必须完全不变
+		FeignAuthProperties.Service apiKey = service("order", "https://api.example.com", "Api-Key", "/api/orders")
+				.getValue();
+		assertThat(new ServiceMatcher(properties(entry("order", apiKey)))
+				.match("https://api.example.com", "/api/orders/1").getServiceName()).isEqualTo("order");
+
+		// oauth2 写成一串大写带空格时，client 前缀匹配与 fallback 判定都要照常生效
+		FeignAuthProperties.Service oauth2 = service("telemetry", "https://api.example.com", " OAUTH2 ").getValue();
+		oauth2.getAuth().setClients(Arrays.asList(client("reading", "/api/measure"), client("fallback")));
+		ServiceMatcher matcher = new ServiceMatcher(properties(entry("telemetry", oauth2)));
+
+		assertThat(matcher.match("https://api.example.com", "/api/measure/read/1").getServiceName())
+				.isEqualTo("telemetry");
+		// oauth2 的 fallback 看的是 default client，而不是 auth.path-prefixes
+		assertThat(matcher.match("https://api.example.com", "/api/other").getServiceName()).isEqualTo("telemetry");
+	}
+
+	@Test
+	void blankAuthTypeIsInvalidAndQuotedVerbatimInTheMessage() {
+		ServiceMatcher matcher = new ServiceMatcher(properties(
+				service("order", "https://api.example.com", "   ", "/api/orders")));
+
+		assertThatThrownBy(() -> matcher.match("https://api.example.com", "/api/orders/1"))
+				.isInstanceOf(FeignAuthConfigurationException.class)
+				.hasMessage("FeignAuth: service(s) matched baseUrl=https://api.example.com but have invalid auth"
+						+ " config: order (unsupported auth.type '   ', expected 'oauth2' or 'api-key')");
+	}
+
+	@Test
 	void urlDerivedValuesAreMemoizedUpToTheCap() throws Exception {
 		ServiceMatcher matcher = new ServiceMatcher(properties(
 				service("order", "https://api.example.com", "api-key", "/api/orders")));
@@ -208,6 +238,14 @@ class ServiceMatcherTest {
 		}
 		service.setAuth(auth);
 		return entry(name, service);
+	}
+
+	private static FeignAuthProperties.Client client(String id, String... prefixes) {
+		FeignAuthProperties.Client client = new FeignAuthProperties.Client();
+		client.setId(id);
+		client.setSecret("secret");
+		client.setPathPrefixes(Arrays.asList(prefixes));
+		return client;
 	}
 
 	private static Map.Entry<String, FeignAuthProperties.Service> oauth2Service(String name, String baseUrl,

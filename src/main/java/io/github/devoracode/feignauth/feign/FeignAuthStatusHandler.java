@@ -10,6 +10,7 @@ import feign.Util;
 import io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties;
 import io.github.devoracode.feignauth.exception.FeignAuthTokenException;
 import io.github.devoracode.feignauth.oauth2.TokenFetcher;
+import io.github.devoracode.feignauth.support.AuthType;
 import io.github.devoracode.feignauth.support.PathUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -17,7 +18,6 @@ import org.springframework.util.Assert;
 import org.apache.commons.lang3.StringUtils;
 
 import java.io.IOException;
-import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
 
@@ -69,10 +69,12 @@ final class FeignAuthStatusHandler {
 		ResolvedRequest request = ResolvedRequest.from(response.request(), this.urlParseWarnings);
 		ResolvedService resolved = (request != null)
 				? this.serviceMatcher.match(request.getBaseUrl(), request.getRequestPath()) : null;
+		// 认证类型只解析一次：下面的判定原本会把 isOAuth2() 连调三次，每次都重扫一遍枚举
+		AuthType authType = authTypeOf(resolved);
 
 		// 检查是否需要读取响应体
 		byte[] bodyBytes = null;
-		if (needResponseBodyCheck(resolved, status) && response.body() != null) {
+		if (needResponseBodyCheck(resolved, authType, status) && response.body() != null) {
 			try {
 				bodyBytes = Util.toByteArray(response.body().asInputStream());
 				// 创建响应体已恢复的新 Response，供后续使用
@@ -88,7 +90,7 @@ final class FeignAuthStatusHandler {
 
 		// 检查 token 是否过期（HTTP 状态码或响应体状态）
 		Integer detectedStatus = detectExpiredTokenStatus(resolved, status, bodyBytes);
-		if (detectedStatus != null && isOAuth2Service(resolved)) {
+		if (detectedStatus != null && authType == AuthType.OAUTH2) {
 			return handleExpiredToken(methodKey, response, resolved, request, detectedStatus);
 		}
 
@@ -97,32 +99,10 @@ final class FeignAuthStatusHandler {
 		}
 
 		String serviceName = (resolved != null) ? resolved.getServiceName() : "unknown";
-		Exception cause = FeignException.errorStatus(methodKey, response);
-		if (status == 401) {
-			return new FeignAuthTokenException("FeignAuth: service '" + serviceName + "' returned " + status
-					+ ", current credentials are not allowed to access this endpoint", cause);
-		}
-		if (status == 403) {
-			return new FeignAuthTokenException("FeignAuth: service '" + serviceName + "' returned " + status
-					+ ", the remote service explicitly rejected this request", cause);
-		}
-		if (status == 404) {
-			return new FeignAuthTokenException("FeignAuth: service '" + serviceName + "' returned " + status
-					+ ", the target resource or path does not exist", cause);
-		}
-		if (status == 429) {
-			return new FeignAuthTokenException("FeignAuth: service '" + serviceName + "' returned " + status
-					+ ", the remote service rate limit has been exceeded", cause);
-		}
-		if (status >= 500) {
-			return new FeignAuthTokenException("FeignAuth: service '" + serviceName + "' returned " + status
-					+ ", the remote service is temporarily unavailable", cause);
-		}
-		return new FeignAuthTokenException("FeignAuth: service '" + serviceName + "' returned " + status
-				+ ", request failed on the remote side", cause);
+		return remoteFailure(methodKey, response, serviceName, status);
 	}
 
-	private boolean needResponseBodyCheck(ResolvedService resolved, int status) {
+	private boolean needResponseBodyCheck(ResolvedService resolved, AuthType authType, int status) {
 		if (resolved == null || resolved.getService() == null || resolved.getService().getAuth() == null) {
 			return false;
 		}
@@ -131,7 +111,7 @@ final class FeignAuthStatusHandler {
 		// 1. HTTP 状态码本身不是 token 过期状态
 		// 2. 该服务为 OAuth2 服务
 		// 3. 已显式配置 responseStatusField
-		return !isExpiredTokenStatus(resolved, status) && isOAuth2Service(resolved)
+		return !isExpiredTokenStatus(resolved, status) && authType == AuthType.OAUTH2
 				&& StringUtils.isNotBlank(auth.getResponseStatusField());
 	}
 
@@ -213,21 +193,48 @@ final class FeignAuthStatusHandler {
 		boolean evicted = this.tokenFetcher.invalidateToken(resolved.getServiceName(), request.getRequestPath());
 		if (!evicted) {
 			// 冷却期内不再清缓存重试：持续 401 说明新令牌同样被拒，重试只会放大请求量
-			String message = "FeignAuth: service '" + resolved.getServiceName() + "' returned " + detectedStatus
-					+ ", OAuth2 token eviction skipped (cooldown or cache empty), request not retried";
+			String message = failureMessage(resolved.getServiceName(), detectedStatus,
+					"OAuth2 token eviction skipped (cooldown or cache empty), request not retried");
 			if (logger.isWarnEnabled()) {
 				logger.warn(message);
 			}
 			return new FeignAuthTokenException(message, FeignException.errorStatus(methodKey, response));
 		}
-		String message = "FeignAuth: service '" + resolved.getServiceName() + "' returned " + detectedStatus
-				+ ", OAuth2 token cache evicted, retrying request";
+		String message = failureMessage(resolved.getServiceName(), detectedStatus,
+				"OAuth2 token cache evicted, retrying request");
 		if (logger.isWarnEnabled()) {
 			logger.warn(message);
 		}
 		Date retryAfter = new Date(System.currentTimeMillis() + 1000L);
 		return new RetryableException(detectedStatus, message, response.request().httpMethod(), retryAfter,
 				response.request());
+	}
+
+	// 远程错误的对外说明：异常类型与文案都属于契约，新增状态码只需要往表里加一行
+	private static FeignAuthTokenException remoteFailure(String methodKey, Response response, String serviceName,
+			int status) {
+		return new FeignAuthTokenException(failureMessage(serviceName, status, adviceFor(status)),
+				FeignException.errorStatus(methodKey, response));
+	}
+
+	private static String failureMessage(String serviceName, int status, String advice) {
+		return "FeignAuth: service '" + serviceName + "' returned " + status + ", " + advice;
+	}
+
+	private static String adviceFor(int status) {
+		switch (status) {
+		case 401:
+			return "current credentials are not allowed to access this endpoint";
+		case 403:
+			return "the remote service explicitly rejected this request";
+		case 404:
+			return "the target resource or path does not exist";
+		case 429:
+			return "the remote service rate limit has been exceeded";
+		default:
+			return status >= 500 ? "the remote service is temporarily unavailable"
+					: "request failed on the remote side";
+		}
 	}
 
 	private static boolean isExpiredTokenStatus(ResolvedService resolved, int status) {
@@ -237,9 +244,11 @@ final class FeignAuthStatusHandler {
 		return resolved.getService().getAuth().isExpiredTokenStatus(status);
 	}
 
-	private static boolean isOAuth2Service(ResolvedService resolved) {
-		return resolved != null && resolved.getService() != null && resolved.getService().getAuth() != null
-				&& resolved.getService().getAuth().isOAuth2();
+	private static AuthType authTypeOf(ResolvedService resolved) {
+		if (resolved == null || resolved.getService() == null || resolved.getService().getAuth() == null) {
+			return null;
+		}
+		return AuthType.from(resolved.getService().getAuth().getType());
 	}
 
 	static final class ResolvedRequest {
@@ -266,10 +275,9 @@ final class FeignAuthStatusHandler {
 				return null;
 			}
 			try {
-				URI uri = URI.create(request.url());
-				String path = StringUtils.isNotBlank(uri.getRawPath()) ? uri.getRawPath() : "";
-				return new ResolvedRequest(uri.getScheme() + "://" + uri.getAuthority(),
-						PathUtils.normalizeRequestPath(path));
+				UrlParts urlParts = UrlParts.parse(request.url());
+				return new ResolvedRequest(urlParts.getBaseUrl(),
+						PathUtils.normalizeRequestPath(urlParts.getRawPath()));
 			}
 			catch (RuntimeException ex) {
 				// 最终 URL 无法解析（如路径里含未编码的空格/非 ASCII 字面量）时，不能把一次正常的 4xx
