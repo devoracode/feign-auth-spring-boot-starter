@@ -63,6 +63,19 @@ class HeaderManagerTest {
 		assertThat(firstValue(template, "X-Present")).isEqualTo("here");
 	}
 
+	@Test
+	void emptyPipelineLeavesTheTemplateUntouched() {
+		// 「没配 request-headers、也没注册定制器」就是默认配置，本方法每个业务请求都要走一遍这条路径；
+		// 提前返回后对外的契约不变——模板里一个 header 也不会多出来
+		RequestTemplate template = template("https://api.example.com", "/api/data");
+
+		new HeaderManager().applyRequestHeaders("svc", serviceWithRequestHeaders(Collections.emptyMap()),
+				"/api/data", template);
+		new HeaderManager().applyRequestHeaders("svc", serviceWithRequestHeaders(null), "/api/data", template);
+
+		assertThat(template.headers()).isEmpty();
+	}
+
 	// ── applyRequestHeaders：动态（HeaderCustomizer）─────────────────────────
 
 	@Test
