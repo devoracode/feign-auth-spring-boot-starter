@@ -51,10 +51,10 @@ class FeignAuthAutoConfigurationTest {
 
 	@Test
 	void httpPropertiesBindFromConfiguration() {
-		this.runner.withPropertyValues("feign.auth.http.connect-timeout=2s", "feign.auth.http.max-total=5",
-				"feign.auth.http.default-max-per-route=3")
+		this.runner.withPropertyValues("feign-auth.http.connect-timeout=2s", "feign-auth.http.max-total=5",
+				"feign-auth.http.default-max-per-route=3")
 				.run(context -> {
-					FeignAuthProperties.Http http = context.getBean(FeignAuthProperties.class).getAuth().getHttp();
+					FeignAuthProperties.Http http = context.getBean(FeignAuthProperties.class).getHttp();
 					assertThat(http.getConnectTimeout()).isEqualTo(java.time.Duration.ofSeconds(2));
 					assertThat(http.getMaxTotal()).isEqualTo(5);
 					assertThat(http.getDefaultMaxPerRoute()).isEqualTo(3);
@@ -63,7 +63,7 @@ class FeignAuthAutoConfigurationTest {
 
 	@Test
 	void redisProviderWorksViaConnectionFactoryWithoutAnyUserTemplates() {
-		this.runner.withPropertyValues("feign.auth.cache.provider=redis")
+		this.runner.withPropertyValues("feign-auth.cache.provider=redis")
 				.withBean(org.springframework.data.redis.connection.RedisConnectionFactory.class,
 						() -> org.mockito.Mockito.mock(org.springframework.data.redis.connection.RedisConnectionFactory.class))
 				.run(context -> {
@@ -77,9 +77,9 @@ class FeignAuthAutoConfigurationTest {
 
 	@Test
 	void invalidHttpPropertyFailsStartupNamingTheKey() {
-		this.runner.withPropertyValues("feign.auth.http.socket-timeout=0s").run(context -> {
+		this.runner.withPropertyValues("feign-auth.http.socket-timeout=0s").run(context -> {
 			assertThat(context).hasFailed();
-			assertThat(context.getStartupFailure()).hasStackTraceContaining("feign.auth.http.socket-timeout");
+			assertThat(context.getStartupFailure()).hasStackTraceContaining("feign-auth.http.socket-timeout");
 		});
 	}
 
@@ -87,9 +87,9 @@ class FeignAuthAutoConfigurationTest {
 	void redisProviderWithoutConnectionFactoryNamesTheRootCause() {
 		// provider=redis 却没有 RedisConnectionFactory 时，两个 redis Bean 的条件都不成立，
 		// 使用方只能看到「TokenStore 注入不上」这条与根因无关的 NoSuchBeanDefinitionException
-		this.runner.withPropertyValues("feign.auth.cache.provider=redis").run(context -> {
+		this.runner.withPropertyValues("feign-auth.cache.provider=redis").run(context -> {
 			assertThat(context).hasFailed();
-			assertThat(context.getStartupFailure()).hasStackTraceContaining("feign.auth.cache.provider=redis")
+			assertThat(context.getStartupFailure()).hasStackTraceContaining("feign-auth.cache.provider=redis")
 					.hasStackTraceContaining("RedisConnectionFactory")
 					.hasStackTraceContaining(FeignAuthConfigurationException.class.getName());
 		});
@@ -98,7 +98,7 @@ class FeignAuthAutoConfigurationTest {
 	@Test
 	void redisProviderKeepsUserDefinedTokenStoreWhenNoConnectionFactoryExists() {
 		// 使用方自备 TokenStore + LockProvider 时不该被快速失败拦截，哪怕容器里没有 Redis 连接
-		this.runner.withPropertyValues("feign.auth.cache.provider=redis")
+		this.runner.withPropertyValues("feign-auth.cache.provider=redis")
 				.withBean(io.github.devoracode.feignauth.oauth2.store.TokenStore.class,
 						io.github.devoracode.feignauth.oauth2.store.LocalTokenStore::new)
 				.withBean(io.github.devoracode.feignauth.oauth2.lock.LockProvider.class,
@@ -110,7 +110,7 @@ class FeignAuthAutoConfigurationTest {
 	void userDefinedTokenFetcherIsNotBlockedByMissingRedisConnection() {
 		// 使用方自备 TokenFetcher 时 starter 的 TokenFetcherConfiguration 整体让位，容器里没有任何组件
 		// 消费 TokenStore / LockProvider，此时不该因为 provider=redis 且没有 Redis 连接而启动失败
-		this.runner.withPropertyValues("feign.auth.cache.provider=redis")
+		this.runner.withPropertyValues("feign-auth.cache.provider=redis")
 				.withBean(TokenFetcher.class, () -> mock(TokenFetcher.class))
 				.run(context -> assertThat(context).hasNotFailed());
 	}

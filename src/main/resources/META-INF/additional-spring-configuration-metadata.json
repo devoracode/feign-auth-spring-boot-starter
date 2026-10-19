@@ -1,207 +1,207 @@
 {
   "groups": [
     {
-      "name": "feign",
+      "name": "feign-auth",
       "type": "io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties",
       "sourceType": "io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties"
     },
     {
-      "name": "feign.services",
+      "name": "feign-auth.services",
       "type": "java.util.Map<java.lang.String,io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties$Service>",
       "sourceType": "io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties"
     },
     {
-      "name": "feign.auth.cache",
+      "name": "feign-auth.cache",
       "type": "io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties$Cache",
       "sourceType": "io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties"
     },
     {
-      "name": "feign.auth.http",
+      "name": "feign-auth.http",
       "type": "io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties$Http",
       "sourceType": "io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties"
     }
   ],
   "properties": [
     {
-      "name": "feign.services",
+      "name": "feign-auth.services",
       "type": "java.util.Map<java.lang.String,io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties$Service>",
       "description": "Named third-party API service configurations keyed by service name."
     },
     {
-      "name": "feign.services.*.base-url",
+      "name": "feign-auth.services.*.base-url",
       "type": "java.lang.String",
       "description": "Base URL used by the Feign client and matched by the auth interceptor."
     },
     {
-      "name": "feign.services.*.auth.type",
+      "name": "feign-auth.services.*.auth.type",
       "type": "java.lang.String",
       "description": "Authentication type for the service. Supported values are oauth2 and api-key."
     },
     {
-      "name": "feign.services.*.auth.token-url",
+      "name": "feign-auth.services.*.auth.token-url",
       "type": "java.lang.String",
       "description": "OAuth2 token endpoint URL. Use https: a plain http endpoint sends client credentials and the issued token in clear text (the starter logs one WARN per authority, loopback addresses excepted)."
     },
     {
-      "name": "feign.services.*.auth.method",
+      "name": "feign-auth.services.*.auth.method",
       "type": "java.lang.String",
       "description": "HTTP method used to request OAuth2 tokens. Supported values are post and get. With get, client credentials are sent in the Authorization header unless client-authentication=parameters puts them back into the query string.",
       "defaultValue": "post"
     },
     {
-      "name": "feign.services.*.auth.client-authentication",
+      "name": "feign-auth.services.*.auth.client-authentication",
       "type": "java.lang.String",
       "description": "How client credentials are sent to the token endpoint: auto (default - get uses HTTP Basic, post sends them as request parameters), basic (always HTTP Basic via the Authorization header), parameters (always request parameters - with method=get the client_secret appears in the query string).",
       "defaultValue": "auto"
     },
     {
-      "name": "feign.services.*.auth.token-header",
+      "name": "feign-auth.services.*.auth.token-header",
       "type": "java.lang.String",
       "description": "Header name used to inject OAuth2 access tokens.",
       "defaultValue": "x-token"
     },
     {
-      "name": "feign.services.*.auth.header-name",
+      "name": "feign-auth.services.*.auth.header-name",
       "type": "java.lang.String",
       "description": "Header name used to inject a fixed API key.",
       "defaultValue": "Authorization"
     },
     {
-      "name": "feign.services.*.auth.token-prefix",
+      "name": "feign-auth.services.*.auth.token-prefix",
       "type": "java.lang.String",
       "description": "Optional prefix prepended to the header value, e.g. \"Bearer \". Applies to both OAuth2 and API key auth types."
     },
     {
-      "name": "feign.services.*.auth.value",
+      "name": "feign-auth.services.*.auth.value",
       "type": "java.lang.String",
       "description": "Fixed API key value used when auth.type is api-key."
     },
     {
-      "name": "feign.services.*.auth.expire-ahead-seconds",
+      "name": "feign-auth.services.*.auth.expire-ahead-seconds",
       "type": "java.lang.Long",
       "description": "Seconds before token expiry when a cached OAuth2 token should be refreshed.",
       "defaultValue": 60
     },
     {
-      "name": "feign.services.*.auth.expired-token-statuses",
+      "name": "feign-auth.services.*.auth.expired-token-statuses",
       "type": "java.util.List<java.lang.Integer>",
       "description": "Status codes treated as an expired token, evicting the cached token and retrying once. Matched against the HTTP response status and, when response-status-field is set, also against the value of that response-body field, so business status codes such as 10001 are allowed there. Only non-2xx responses are inspected. When unset or empty, the built-in default [401, 421, 423] applies.",
       "defaultValue": [401, 421, 423]
     },
     {
-      "name": "feign.services.*.auth.response-status-field",
+      "name": "feign-auth.services.*.auth.response-status-field",
       "type": "java.lang.String",
       "description": "JSON field path in response body to check for expired token status. Supports dot-separated paths like 'data.code'. Only evaluated for non-2xx responses whose HTTP status is not already in expired-token-statuses, and only for oauth2 services. When not set, only HTTP status codes are used for expired token detection."
     },
     {
-      "name": "feign.services.*.auth.token-field",
+      "name": "feign-auth.services.*.auth.token-field",
       "type": "java.lang.String",
       "description": "Dot-separated JSON path to extract the access token from the token response, e.g. data.accessToken. When blank, the built-in auto-detection (access_token / accessToken / token) is used."
     },
     {
-      "name": "feign.services.*.auth.token-expires-in-seconds",
+      "name": "feign-auth.services.*.auth.token-expires-in-seconds",
       "type": "java.lang.Long",
       "description": "Configured OAuth2 access token TTL in seconds. When set to a positive value, overrides expires_in / expiresIn / expire_in / expireIn fields in the token response. Effective TTL is capped at 86400 seconds (1 day)."
     },
     {
-      "name": "feign.services.*.auth.request-fields.client-id",
+      "name": "feign-auth.services.*.auth.request-fields.client-id",
       "type": "java.lang.String",
       "description": "OAuth2 request field name for client id. When not set, defaults to client_id."
     },
     {
-      "name": "feign.services.*.auth.request-fields.client-secret",
+      "name": "feign-auth.services.*.auth.request-fields.client-secret",
       "type": "java.lang.String",
       "description": "OAuth2 request field name for client secret. When not set, defaults to client_secret."
     },
     {
-      "name": "feign.services.*.auth.request-fields.grant-type",
+      "name": "feign-auth.services.*.auth.request-fields.grant-type",
       "type": "java.lang.String",
       "description": "OAuth2 request field name for grant type. Only used when custom client-id/client-secret field names are configured; with default field names the parameter is always sent as grant_type."
     },
     {
-      "name": "feign.services.*.auth.clients",
+      "name": "feign-auth.services.*.auth.clients",
       "type": "java.util.List<io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties$Client>",
       "description": "OAuth2 client credentials and optional path prefix routes."
     },
     {
-      "name": "feign.services.*.auth.clients[].id",
+      "name": "feign-auth.services.*.auth.clients[].id",
       "type": "java.lang.String",
       "description": "OAuth2 client id."
     },
     {
-      "name": "feign.services.*.auth.clients[].secret",
+      "name": "feign-auth.services.*.auth.clients[].secret",
       "type": "java.lang.String",
       "description": "OAuth2 client secret."
     },
     {
-      "name": "feign.services.*.auth.clients[].grant-type",
+      "name": "feign-auth.services.*.auth.clients[].grant-type",
       "type": "java.lang.String",
       "description": "OAuth2 grant type value. Defaults to client_credentials when the default request field names are used; omitted when custom field names are configured and this value is not set."
     },
     {
-      "name": "feign.services.*.auth.clients[].path-prefixes",
+      "name": "feign-auth.services.*.auth.clients[].path-prefixes",
       "type": "java.util.List<java.lang.String>",
       "description": "Request path prefixes routed to this OAuth2 client. Omit to define the default client for the service."
     },
     {
-      "name": "feign.services.*.auth.path-prefixes",
+      "name": "feign-auth.services.*.auth.path-prefixes",
       "type": "java.util.List<java.lang.String>",
       "description": "Request path prefixes routed to this API key service. Omit to define the fallback API key service for the same base URL."
     },
     {
-      "name": "feign.services.*.auth.request-headers",
+      "name": "feign-auth.services.*.auth.request-headers",
       "type": "java.util.Map<java.lang.String,java.lang.String>",
       "description": "Static headers added to every Feign business request for this service."
     },
     {
-      "name": "feign.services.*.auth.token-request-headers",
+      "name": "feign-auth.services.*.auth.token-request-headers",
       "type": "java.util.Map<java.lang.String,java.lang.String>",
       "description": "Static headers added to the OAuth2 token HTTP request for this service. A configured Content-Type controls the POST request body encoding: application/json (default when unset) sends a JSON object, application/x-www-form-urlencoded sends form pairs; other values fail fast."
     },
     {
-      "name": "feign.auth.cache.provider",
+      "name": "feign-auth.cache.provider",
       "type": "java.lang.String",
       "description": "Cache provider type. Supported values are local and redis.",
       "defaultValue": "local"
     },
     {
-      "name": "feign.auth.cache.redis.key-prefix",
+      "name": "feign-auth.cache.redis.key-prefix",
       "type": "java.lang.String",
       "description": "Redis key prefix used for both token cache and distributed lock keys. Token keys will be formatted as {prefix}token:{key}, lock keys as {prefix}lock:{key}.",
       "defaultValue": "feign-auth:"
     },
     {
-      "name": "feign.auth.fail-on-no-match",
+      "name": "feign-auth.fail-on-no-match",
       "type": "java.lang.Boolean",
       "description": "When true (default), a request whose URL/path matches no configured service fails fast with FeignAuthConfigurationException. When false, a WARN is logged and the request is sent without auth headers. Services matched by base URL but carrying invalid auth config always fail fast regardless of this flag.",
       "defaultValue": true
     },
     {
-      "name": "feign.auth.http.connect-timeout",
+      "name": "feign-auth.http.connect-timeout",
       "type": "java.time.Duration",
       "description": "Connect timeout for the built-in Apache HttpClient used for OAuth2 token requests.",
       "defaultValue": "5s"
     },
     {
-      "name": "feign.auth.http.connection-request-timeout",
+      "name": "feign-auth.http.connection-request-timeout",
       "type": "java.time.Duration",
       "description": "Timeout for obtaining a connection from the built-in token request connection pool.",
       "defaultValue": "5s"
     },
     {
-      "name": "feign.auth.http.socket-timeout",
+      "name": "feign-auth.http.socket-timeout",
       "type": "java.time.Duration",
       "description": "Socket (read) timeout for the built-in Apache HttpClient used for OAuth2 token requests.",
       "defaultValue": "10s"
     },
     {
-      "name": "feign.auth.http.max-total",
+      "name": "feign-auth.http.max-total",
       "type": "java.lang.Integer",
       "description": "Maximum total connections in the built-in token request connection pool.",
       "defaultValue": 200
     },
     {
-      "name": "feign.auth.http.default-max-per-route",
+      "name": "feign-auth.http.default-max-per-route",
       "type": "java.lang.Integer",
       "description": "Maximum connections per route in the built-in token request connection pool.",
       "defaultValue": 50
@@ -209,7 +209,7 @@
   ],
   "hints": [
     {
-      "name": "feign.services.*.auth.type",
+      "name": "feign-auth.services.*.auth.type",
       "values": [
         {
           "value": "oauth2",
@@ -222,7 +222,7 @@
       ]
     },
     {
-      "name": "feign.services.*.auth.method",
+      "name": "feign-auth.services.*.auth.method",
       "values": [
         {
           "value": "post"
@@ -233,7 +233,7 @@
       ]
     },
     {
-      "name": "feign.services.*.auth.client-authentication",
+      "name": "feign-auth.services.*.auth.client-authentication",
       "values": [
         {
           "value": "auto",
@@ -250,7 +250,7 @@
       ]
     },
     {
-      "name": "feign.auth.cache.provider",
+      "name": "feign-auth.cache.provider",
       "values": [
         {
           "value": "local",

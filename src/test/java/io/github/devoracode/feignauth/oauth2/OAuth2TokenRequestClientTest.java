@@ -326,7 +326,7 @@ class OAuth2TokenRequestClientTest {
 		http.setSocketTimeout(Duration.ZERO);
 
 		assertThatThrownBy(() -> createClient(http)).isInstanceOf(FeignAuthConfigurationException.class)
-				.hasMessageContaining("feign.auth.http.socket-timeout");
+				.hasMessageContaining("feign-auth.http.socket-timeout");
 	}
 
 	@Test
@@ -335,7 +335,7 @@ class OAuth2TokenRequestClientTest {
 		http.setConnectTimeout(Duration.ofSeconds(-1));
 
 		assertThatThrownBy(() -> createClient(http)).isInstanceOf(FeignAuthConfigurationException.class)
-				.hasMessageContaining("feign.auth.http.connect-timeout");
+				.hasMessageContaining("feign-auth.http.connect-timeout");
 	}
 
 	@Test
@@ -344,7 +344,7 @@ class OAuth2TokenRequestClientTest {
 		http.setConnectionRequestTimeout(Duration.ofNanos(500_000));
 
 		assertThatThrownBy(() -> createClient(http)).isInstanceOf(FeignAuthConfigurationException.class)
-				.hasMessageContaining("feign.auth.http.connection-request-timeout");
+				.hasMessageContaining("feign-auth.http.connection-request-timeout");
 	}
 
 	@Test
@@ -353,7 +353,7 @@ class OAuth2TokenRequestClientTest {
 		http.setSocketTimeout(null);
 
 		assertThatThrownBy(() -> createClient(http)).isInstanceOf(FeignAuthConfigurationException.class)
-				.hasMessageContaining("feign.auth.http.socket-timeout");
+				.hasMessageContaining("feign-auth.http.socket-timeout");
 	}
 
 	@Test

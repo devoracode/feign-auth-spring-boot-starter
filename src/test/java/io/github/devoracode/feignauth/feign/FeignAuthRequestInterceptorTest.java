@@ -89,7 +89,7 @@ class FeignAuthRequestInterceptorTest {
 	@Test
 	void warnsButProceedsWhenFailOnNoMatchDisabledAndServiceNotFound() {
 		FeignAuthProperties properties = new FeignAuthProperties();
-		properties.getAuth().setFailOnNoMatch(false);
+		properties.setFailOnNoMatch(false);
 		FeignAuthRequestInterceptor interceptor = new FeignAuthRequestInterceptor(
 			new ServiceMatcher(properties), null, new HeaderManager(), properties);
 
@@ -100,10 +100,11 @@ class FeignAuthRequestInterceptorTest {
 	}
 
 	@Test
-	void nullGlobalAuthStillFailsWithConfigExceptionInsteadOfNpe() {
+	void nullConfigBranchesStillFailWithConfigExceptionInsteadOfNpe() {
 		FeignAuthProperties properties = new FeignAuthProperties();
-		// 自定义 @Bean 场景可能把全局 auth 显式置空，此处必须仍是可读的配置异常
-		properties.setAuth(null);
+		// 自定义 @Bean 场景可能把全局配置节点显式置空，此处必须仍是可读的配置异常而不是 NPE
+		properties.setCache(null);
+		properties.setHttp(null);
 		FeignAuthRequestInterceptor interceptor = new FeignAuthRequestInterceptor(
 			new ServiceMatcher(properties), null, new HeaderManager(), properties);
 
@@ -153,7 +154,7 @@ class FeignAuthRequestInterceptorTest {
 	void throwsOnUnsupportedAuthTypeEvenWhenFailOnNoMatchDisabled() {
 		FeignAuthProperties.Service service = service("oauth", auth -> auth.setValue("ignored"));
 		FeignAuthProperties properties = new FeignAuthProperties();
-		properties.getAuth().setFailOnNoMatch(false);
+		properties.setFailOnNoMatch(false);
 		properties.getServices().put("order", service);
 		FeignAuthRequestInterceptor interceptor = new FeignAuthRequestInterceptor(new ServiceMatcher(properties),
 			null, new HeaderManager(), properties);
@@ -204,7 +205,7 @@ class FeignAuthRequestInterceptorTest {
 	@Test
 	void noMatchWarningIsLoggedOncePerBaseUrlAndLaterOccurrenceDropsToDebug() {
 		FeignAuthProperties properties = new FeignAuthProperties();
-		properties.getAuth().setFailOnNoMatch(false);
+		properties.setFailOnNoMatch(false);
 		FeignAuthRequestInterceptor interceptor = new FeignAuthRequestInterceptor(
 			new ServiceMatcher(properties), null, new HeaderManager(), properties);
 

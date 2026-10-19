@@ -1,19 +1,19 @@
 # -----------------------------------------------------------------------------
-# feign multi-api 示例配置
+# feign-auth multi-api 示例配置
 # 结构风格：
+# - 全局项（cache / http / fail-on-no-match）直接挂在 feign-auth 下
 # - services: 按服务名组织配置
-# - auth: 统一放鉴权方式与凭证信息
-# - OAuth2 多 Client 场景: 路由放在 auth.clients[].path-prefixes, 同一个域名,允许多个 path-prefixes Client,但只允许一个 Default Client（即未配置 path-prefixes）
-# - API Key 无多 Client 场景: 路由放在 auth.path-prefixes
+# - services.<name>.auth: 各服务的鉴权方式与凭证信息
+# - OAuth2 多 Client 场景: 路由放在 services.<name>.auth.clients[].path-prefixes, 同一个服务下允许多个 path-prefixes Client,但只允许一个 Default Client（即未配置 path-prefixes）
+# - API Key 无多 Client 场景: 路由放在 services.<name>.auth.path-prefixes; 不配即兜底,同一 base-url 只允许一个兜底服务
 # -----------------------------------------------------------------------------
 
-feign:
-  auth:
-    cache:
-      provider: redis
+feign-auth:
+  cache:
+    provider: redis
 
-      redis:
-        key-prefix: "feign-auth:token:"
+    redis:
+      key-prefix: "feign-auth:token:"
 
   services:
     measure:

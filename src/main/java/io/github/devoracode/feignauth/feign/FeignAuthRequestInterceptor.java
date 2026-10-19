@@ -78,14 +78,14 @@ public class FeignAuthRequestInterceptor implements RequestInterceptor {
 
         ResolvedService resolved = this.serviceMatcher.match(baseUrl, requestPath);
         if (resolved == null) {
-            if (this.properties.getAuth().isFailOnNoMatch()) {
+            if (this.properties.isFailOnNoMatch()) {
                 throw new FeignAuthConfigurationException(
                     "FeignAuth: no service config matched for baseUrl=" + baseUrl + ", path=" + requestPath
                         + "; configured services: " + describeConfiguredServices()
                         + "; the Feign target URL must point to the same scheme/host/port as"
-                        + " feign.services.<name>.base-url (default ports 80/443 are normalized, a base-url path is"
+                        + " feign-auth.services.<name>.base-url (default ports 80/443 are normalized, a base-url path is"
                         + " treated as an outer prefix for path matching)"
-                        + "; set feign.auth.fail-on-no-match=false to send unmatched requests without auth headers");
+                        + "; set feign-auth.fail-on-no-match=false to send unmatched requests without auth headers");
             }
             if (this.noMatchWarnings.shouldWarn(baseUrl)) {
                 logger.warn("FeignAuth: no service config matched for baseUrl=" + baseUrl + ", path=" + requestPath
@@ -102,7 +102,7 @@ public class FeignAuthRequestInterceptor implements RequestInterceptor {
         // ServiceMatcher 已拒绝非法 auth，此处仅作防御
         if (auth == null) {
             throw new FeignAuthConfigurationException("FeignAuth: service '" + resolved.getServiceName()
-                + "' has no auth config — fix feign.services." + resolved.getServiceName() + ".auth");
+                + "' has no auth config — fix feign-auth.services." + resolved.getServiceName() + ".auth");
         }
 
         if (auth.isApiKey()) {

@@ -22,10 +22,14 @@ import java.util.Map;
  */
 @Getter
 @Setter
-@ConfigurationProperties(prefix = "feign")
+@ConfigurationProperties(prefix = "feign-auth")
 public class FeignAuthProperties implements InitializingBean {
 
-    private GlobalAuth auth = new GlobalAuth();
+    private Cache cache = new Cache();
+
+    private Http http = new Http();
+
+    private boolean failOnNoMatch = true;
 
     private Map<String, Service> services = new HashMap<>();
 
@@ -36,25 +40,25 @@ public class FeignAuthProperties implements InitializingBean {
      */
     @Override
     public void afterPropertiesSet() {
-        validateHttp(this.auth.getHttp());
-        validateCacheProvider(this.auth.getCache());
-        validateKeyPrefix(this.auth.getCache().getRedis());
+        validateHttp(this.getHttp());
+        validateCacheProvider(this.getCache());
+        validateKeyPrefix(this.getCache().getRedis());
         if (this.services != null) {
             this.services.forEach(FeignAuthProperties::validateService);
         }
     }
 
     private static void validateHttp(Http http) {
-        requirePositiveDuration("feign.auth.http.connect-timeout", http.getConnectTimeout());
-        requirePositiveDuration("feign.auth.http.connection-request-timeout", http.getConnectionRequestTimeout());
-        requirePositiveDuration("feign.auth.http.socket-timeout", http.getSocketTimeout());
-        requirePositive("feign.auth.http.max-total", http.getMaxTotal());
-        requirePositive("feign.auth.http.default-max-per-route", http.getDefaultMaxPerRoute());
+        requirePositiveDuration("feign-auth.http.connect-timeout", http.getConnectTimeout());
+        requirePositiveDuration("feign-auth.http.connection-request-timeout", http.getConnectionRequestTimeout());
+        requirePositiveDuration("feign-auth.http.socket-timeout", http.getSocketTimeout());
+        requirePositive("feign-auth.http.max-total", http.getMaxTotal());
+        requirePositive("feign-auth.http.default-max-per-route", http.getDefaultMaxPerRoute());
     }
 
     private static void validateKeyPrefix(Redis redis) {
         if (redis.getKeyPrefix() == null) {
-            throw invalid("feign.auth.cache.redis.key-prefix", null, "must not be null");
+            throw invalid("feign-auth.cache.redis.key-prefix", null, "must not be null");
         }
     }
 
@@ -67,7 +71,7 @@ public class FeignAuthProperties implements InitializingBean {
     private static void validateCacheProvider(Cache cache) {
         String provider = cache.getProvider();
         if (!"local".equalsIgnoreCase(provider) && !"redis".equalsIgnoreCase(provider)) {
-            throw invalid("feign.auth.cache.provider", provider, "must be either 'local' or 'redis'");
+            throw invalid("feign-auth.cache.provider", provider, "must be either 'local' or 'redis'");
         }
     }
 
@@ -79,7 +83,7 @@ public class FeignAuthProperties implements InitializingBean {
             return;
         }
         Auth auth = service.getAuth();
-        String keyPrefix = "feign.services." + name + ".auth.";
+        String keyPrefix = "feign-auth.services." + name + ".auth.";
         if (auth.getExpireAheadSeconds() < 0L) {
             throw invalid(keyPrefix + "expire-ahead-seconds", auth.getExpireAheadSeconds(), "must not be negative");
         }
@@ -150,29 +154,13 @@ public class FeignAuthProperties implements InitializingBean {
                 "FeignAuth: invalid configuration " + key + "=" + value + ", " + requirement);
     }
 
-    // 自定义 @Bean 时显式置空不该让下游 getAuth() 链路 NPE，统一回退默认值
-    public void setAuth(GlobalAuth auth) {
-        this.auth = auth == null ? new GlobalAuth() : auth;
+    // 自定义 @Bean 时显式置空不该让下游 getCache()/getHttp() 链路 NPE，统一回退默认值
+    public void setCache(Cache cache) {
+        this.cache = cache == null ? new Cache() : cache;
     }
 
-    @Getter
-    @Setter
-    public static class GlobalAuth {
-
-        private Cache cache = new Cache();
-
-        private Http http = new Http();
-
-        private boolean failOnNoMatch = true;
-
-        public void setCache(Cache cache) {
-            this.cache = cache == null ? new Cache() : cache;
-        }
-
-        public void setHttp(Http http) {
-            this.http = http == null ? new Http() : http;
-        }
-
+    public void setHttp(Http http) {
+        this.http = http == null ? new Http() : http;
     }
 
     /**

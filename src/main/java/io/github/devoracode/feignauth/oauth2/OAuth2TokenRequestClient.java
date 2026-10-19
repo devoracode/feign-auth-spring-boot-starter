@@ -393,10 +393,10 @@ public class OAuth2TokenRequestClient implements AutoCloseable {
 		connectionManager.setDefaultMaxPerRoute(http.getDefaultMaxPerRoute());
 
 		RequestConfig requestConfig = RequestConfig.custom()
-				.setConnectTimeout(toMillis(http.getConnectTimeout(), "feign.auth.http.connect-timeout"))
+				.setConnectTimeout(toMillis(http.getConnectTimeout(), "feign-auth.http.connect-timeout"))
 				.setConnectionRequestTimeout(
-						toMillis(http.getConnectionRequestTimeout(), "feign.auth.http.connection-request-timeout"))
-				.setSocketTimeout(toMillis(http.getSocketTimeout(), "feign.auth.http.socket-timeout"))
+						toMillis(http.getConnectionRequestTimeout(), "feign-auth.http.connection-request-timeout"))
+				.setSocketTimeout(toMillis(http.getSocketTimeout(), "feign-auth.http.socket-timeout"))
 				.build();
 
 		return HttpClientBuilder.create()
