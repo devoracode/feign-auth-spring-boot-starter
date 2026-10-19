@@ -13,7 +13,7 @@ public interface HeaderCustomizer {
 
 	/**
 	 * 返回该定制器是否应当应用于给定服务。
-	 * @param serviceName 逻辑服务名（{@code feign.services} 下的键）
+	 * @param serviceName 逻辑服务名（{@code feign-auth.services} 下的键）
 	 * @param service 服务配置
 	 * @return 当该定制器应对该服务生效时返回 {@code true}
 	 */

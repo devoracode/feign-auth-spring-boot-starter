@@ -120,6 +120,115 @@ class OAuth2TokenResponseParserTest {
 	}
 
 	@Test
+	void tokenFieldResolvesSingleSegmentAtRoot() {
+		// 只写一层时点分路径等价于根字段查找，命中的是 token-field 而不是默认字段表
+		String body = "{\"token\":\"token-value\"}";
+		OAuth2AccessToken accessToken = this.parser.parse(200, body, 60L, "token", 3600L);
+
+		assertThat(accessToken.getAccessToken()).isEqualTo("token-value");
+	}
+
+	@Test
+	void tokenFieldResolvesNestedDottedPathWithoutDepthLimit() {
+		// 点分路径逐段下钻，没有 expires_in 那样的三层搜索上限
+		String body = "{\"a\":{\"b\":{\"c\":{\"d\":{\"token\":\"token-value\"}}}}}";
+		OAuth2AccessToken accessToken = this.parser.parse(200, body, 60L, "a.b.c.d.token", 3600L);
+
+		assertThat(accessToken.getAccessToken()).isEqualTo("token-value");
+	}
+
+	@Test
+	void tokenFieldAcceptsNumericLeafAsText() {
+		// 既有口径：叶节点是数字也按 asText() 取用，不视为「找不到」
+		String body = "{\"data\":{\"token\":123456}}";
+		OAuth2AccessToken accessToken = this.parser.parse(200, body, 60L, "data.token", 3600L);
+
+		assertThat(accessToken.getAccessToken()).isEqualTo("123456");
+	}
+
+	@Test
+	void tokenFieldIsTrimmedForLookupButReportedVerbatim() {
+		// 查找用 trim 后的路径，异常文案保留配置原值，便于定位写错的那条 token-field
+		String body = "{\"data\":{\"token\":\"token-value\"}}";
+		OAuth2AccessToken accessToken = this.parser.parse(200, body, 60L, "  data.token  ", 3600L);
+		assertThat(accessToken.getAccessToken()).isEqualTo("token-value");
+
+		assertThatThrownBy(() -> this.parser.parse(200, "{\"data\":{}}", 60L, "  data.token  ", 3600L))
+				.isInstanceOf(FeignAuthTokenException.class)
+				.hasMessage("Token field '  data.token  ' not found or blank in response");
+	}
+
+	@Test
+	void blankTokenFieldUsesDefaultTokenFieldSearch() {
+		// 只填空白等于没填，仍走 access_token/accessToken/token 的默认顺序
+		String body = "{\"accessToken\":\"token-value\"}";
+		OAuth2AccessToken accessToken = this.parser.parse(200, body, 60L, "   ", 3600L);
+
+		assertThat(accessToken.getAccessToken()).isEqualTo("token-value");
+	}
+
+	@Test
+	void explicitTokenFieldMissNeverFallsBackToDefaultFields() {
+		// 配了 token-field 却没命中就报错，退回默认字段会静默拿到另一个令牌
+		String body = "{\"access_token\":\"other-token\",\"data\":{\"token\":\"   \"}}";
+
+		assertThatThrownBy(() -> this.parser.parse(200, body, 60L, "data.token", 3600L))
+				.isInstanceOf(FeignAuthTokenException.class)
+				.hasMessage("Token field 'data.token' not found or blank in response");
+	}
+
+	@Test
+	void tokenFieldThroughNonObjectSegmentIsRejected() {
+		// 中间段是标量或数组都无从下钻；下标写法 data[0] 也只是个找不到的键名
+		assertThatThrownBy(() -> this.parser.parse(200, "{\"data\":\"not-an-object\"}", 60L, "data.token", 3600L))
+				.isInstanceOf(FeignAuthTokenException.class)
+				.hasMessage("Token field 'data.token' not found or blank in response");
+		assertThatThrownBy(() -> this.parser.parse(200, "{\"data\":[{\"token\":\"t\"}]}", 60L, "data.token", 3600L))
+				.isInstanceOf(FeignAuthTokenException.class)
+				.hasMessage("Token field 'data.token' not found or blank in response");
+		assertThatThrownBy(() -> this.parser.parse(200, "{\"data\":[{\"token\":\"t\"}]}", 60L, "data[0].token", 3600L))
+				.isInstanceOf(FeignAuthTokenException.class)
+				.hasMessage("Token field 'data[0].token' not found or blank in response");
+	}
+
+	@Test
+	void tokenFieldLeafMustBePresentValueNode() {
+		// 缺叶与叶是对象都归为同一条文案；「叶是空白串」那一半在上一条用例里已覆盖
+		assertThatThrownBy(() -> this.parser.parse(200, "{\"data\":{\"other\":\"t\"}}", 60L, "data.token", 3600L))
+				.isInstanceOf(FeignAuthTokenException.class)
+				.hasMessage("Token field 'data.token' not found or blank in response");
+		assertThatThrownBy(() -> this.parser.parse(200, "{\"data\":{\"token\":{\"t\":\"v\"}}}", 60L, "data.token", 3600L))
+				.isInstanceOf(FeignAuthTokenException.class)
+				.hasMessage("Token field 'data.token' not found or blank in response");
+	}
+
+	@Test
+	void trailingDotInTokenFieldResolvesToParentObject() {
+		// String.split 会丢掉尾部空段，"data." 实际只按 "data" 解析，取到的是对象而非令牌
+		String body = "{\"data\":{\"token\":\"token-value\"}}";
+
+		assertThatThrownBy(() -> this.parser.parse(200, body, 60L, "data.", 3600L))
+				.isInstanceOf(FeignAuthTokenException.class)
+				.hasMessage("Token field 'data.' not found or blank in response");
+	}
+
+	@Test
+	void tokenFieldOnArrayRootIsRejected() {
+		// 响应体是数组根时点分路径第一步就下不去
+		assertThatThrownBy(() -> this.parser.parse(200, "[{\"token\":\"t\"}]", 60L, "token", 3600L))
+				.isInstanceOf(FeignAuthTokenException.class)
+				.hasMessage("Token field 'token' not found or blank in response");
+	}
+
+	@Test
+	void defaultTokenFieldFailureKeepsItsOwnMessage() {
+		// 未配 token-field 时的失败文案不带字段名，与点分路径那条区分开
+		assertThatThrownBy(() -> this.parser.parse(200, "{}", 60L, null, 3600L))
+				.isInstanceOf(FeignAuthTokenException.class)
+				.hasMessage("Token field not found in response");
+	}
+
+	@Test
 	void non2xxReportsErrorAndErrorDescriptionFromJsonBody() {
 		String body = "{\"error\":\"invalid_client\",\"error_description\":\"client_secret is expired\"}";
 

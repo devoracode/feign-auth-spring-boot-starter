@@ -2,6 +2,7 @@ package io.github.devoracode.feignauth.feign;
 
 import io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties;
 import io.github.devoracode.feignauth.exception.FeignAuthConfigurationException;
+import io.github.devoracode.feignauth.support.AuthType;
 import io.github.devoracode.feignauth.support.PathUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.util.Assert;
@@ -29,10 +30,9 @@ public class ServiceMatcher {
 
 	private final FeignAuthProperties properties;
 
-	// URL 串到派生值是纯函数映射（同一个字符串永远得到同一个结果），因此缓存不会因配置变更而失效
-	private final ConcurrentMap<String, String> authorityCache = new ConcurrentHashMap<>();
-
-	private final ConcurrentMap<String, String> basePathCache = new ConcurrentHashMap<>();
+	// URL 串到 (authority, basePath) 是纯函数映射（同一个字符串永远得到同一个结果），因此缓存不会因配置变更而失效
+	// 记忆化与 MAX_URL_CACHE_ENTRIES 上限都没有对外契约可观察，ServiceMatcherTest 反射读取本字段来钉住
+	private final ConcurrentMap<String, PathUtils.BaseUrlParts> urlCache = new ConcurrentHashMap<>();
 
 	public ServiceMatcher(FeignAuthProperties properties) {
 		Assert.notNull(properties, "properties must not be null");
@@ -74,7 +74,10 @@ public class ServiceMatcher {
 						" (auth config is missing, expected auth.type 'oauth2' or 'api-key')");
 				continue;
 			}
-			if (!auth.isApiKey() && !auth.isOAuth2()) {
+			// 认证类型每个请求只需解析一次，后续判定都用枚举比较：
+			// isApiKey()/isOAuth2() 各自都要重扫一遍枚举，而本方法每个请求都会执行
+			AuthType authType = AuthType.from(auth.getType());
+			if (authType == null) {
 				invalidConfigs = appendInvalidConfig(invalidConfigs, entry.getKey(),
 						" (unsupported auth.type '" + auth.getType() + "', expected 'oauth2' or 'api-key')");
 				continue;
@@ -82,7 +85,7 @@ public class ServiceMatcher {
 			validCandidates++;
 
 			// 配置 base-url 携带的路径段是外层前缀：请求路径落在其下时先剥离再匹配
-			int matchLength = bestPrefixMatchLength(auth,
+			int matchLength = bestPrefixMatchLength(auth, authType,
 					stripConfiguredBasePath(requestPath, basePath(service.getBaseUrl())));
 			if (matchLength > 0) {
 				if (matchLength > bestPrefixLength) {
@@ -141,40 +144,29 @@ public class ServiceMatcher {
 
 	// 解析失败（如服务发现名）时退化为小写去空白的原串，保持旧有字符串比较语义
 	private String authorityKey(String url) {
-		if (url == null) {
-			return "";
-		}
-		String cached = this.authorityCache.get(url);
-		if (cached != null) {
-			return cached;
-		}
-		String computed = computeAuthorityKey(url);
-		if (this.authorityCache.size() < MAX_URL_CACHE_ENTRIES) {
-			this.authorityCache.put(url, computed);
-		}
-		return computed;
-	}
-
-	private static String computeAuthorityKey(String url) {
-		String normalized = PathUtils.normalizeBaseUrlAuthority(url);
-		if (normalized != null) {
-			return normalized;
+		String authority = derive(url).getAuthority();
+		if (authority != null) {
+			return authority;
 		}
 		return StringUtils.isBlank(url) ? "" : StringUtils.strip(url).toLowerCase(Locale.ROOT);
 	}
 
-	// 与 authorityKey 同理：派生结果只取决于 URL 串本身，缓存不会因为配置变更而失效
 	private String basePath(String url) {
+		return derive(url).getBasePath();
+	}
+
+	// 一个 URL 串只解析一次，authority 与 basePath 两个派生值同时得到；null 不入缓存也不报错，与旧实现一致
+	private PathUtils.BaseUrlParts derive(String url) {
 		if (url == null) {
-			return "";
+			return PathUtils.BaseUrlParts.EMPTY;
 		}
-		String cached = this.basePathCache.get(url);
+		PathUtils.BaseUrlParts cached = this.urlCache.get(url);
 		if (cached != null) {
 			return cached;
 		}
-		String computed = PathUtils.baseUrlPath(url);
-		if (this.basePathCache.size() < MAX_URL_CACHE_ENTRIES) {
-			this.basePathCache.put(url, computed);
+		PathUtils.BaseUrlParts computed = PathUtils.parseBaseUrl(url);
+		if (this.urlCache.size() < MAX_URL_CACHE_ENTRIES) {
+			this.urlCache.put(url, computed);
 		}
 		return computed;
 	}
@@ -192,12 +184,12 @@ public class ServiceMatcher {
 		return requestPath;
 	}
 
-	private static int bestPrefixMatchLength(FeignAuthProperties.Auth auth, String requestPath) {
+	private static int bestPrefixMatchLength(FeignAuthProperties.Auth auth, AuthType authType, String requestPath) {
 		if (StringUtils.isBlank(requestPath)) {
 			return 0;
 		}
 
-		if (auth.isApiKey()) {
+		if (authType == AuthType.API_KEY) {
 			return PathUtils.bestPrefixMatchLength(auth.getPathPrefixes(), requestPath);
 		}
 		if (auth.getClients() == null) {

@@ -26,7 +26,7 @@ public class FeignClientConfig {
 
 	private final ServiceMatcher serviceMatcher;
 
-	private final TokenFetcher tokenFetcher;
+	private final ObjectProvider<TokenFetcher> tokenFetcherProvider;
 
 	private final HeaderManager headerManager;
 
@@ -42,7 +42,8 @@ public class FeignClientConfig {
 		Assert.notNull(objectMapper, "objectMapper must not be null");
 		Assert.notNull(properties, "properties must not be null");
 		this.serviceMatcher = serviceMatcher;
-		this.tokenFetcher = tokenFetcherProvider.getIfAvailable();
+		// 只持有 ObjectProvider：构造这个配置类时不该顺带解析 TokenFetcher，留给各 @Bean 方法按需取
+		this.tokenFetcherProvider = tokenFetcherProvider;
 		this.headerManager = headerManager;
 		this.objectMapper = objectMapper;
 		this.properties = properties;
@@ -50,13 +51,14 @@ public class FeignClientConfig {
 
 	@Bean
 	public RequestInterceptor feignAuthRequestInterceptor() {
-		return new FeignAuthRequestInterceptor(this.serviceMatcher, this.tokenFetcher, this.headerManager,
-			this.properties);
+		return new FeignAuthRequestInterceptor(this.serviceMatcher, this.tokenFetcherProvider.getIfAvailable(),
+			this.headerManager, this.properties);
 	}
 
 	@Bean
 	public ErrorDecoder feignAuthErrorDecoder() {
-		return new FeignAuthErrorDecoder(this.serviceMatcher, this.tokenFetcher, this.objectMapper);
+		return new FeignAuthErrorDecoder(this.serviceMatcher, this.tokenFetcherProvider.getIfAvailable(),
+			this.objectMapper);
 	}
 
 	@Bean

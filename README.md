@@ -7,7 +7,7 @@ Spring Boot Starter，为 OpenFeign 提供多服务鉴权自动注入与自定�
 - Java 8+（starter 以 `source/target 1.8` 编译）
 - Spring Boot 2.2.x ~ 2.7.x：基线为 2.2.5（依赖管理与测试均以此为准），自动配置同时注册 `spring.factories`（≤2.6）与 `AutoConfiguration.imports`（2.7+），故 2.7 下同样可加载
 - 使用方自行引入 OpenFeign（`spring-cloud-starter-openfeign`，对应 feign-core 10.x）：starter 对 `feign-core` 的依赖是 `optional`，不会传递进来
-- 令牌请求所需的 Apache HttpClient 与 `provider: redis` 所需的 Spring Data Redis 目前由 starter 传递引入，无需单独声明
+- 令牌请求所需的 Apache HttpClient 由 starter 传递引入，无需单独声明；`provider: redis` 所需的 Spring Data Redis **不再传递引入**（对 `spring-boot-starter-data-redis` 的依赖是 `optional`），要用 Redis 缓存/锁需自行声明该 starter
 
 ## 安装
 
@@ -15,7 +15,7 @@ Spring Boot Starter，为 OpenFeign 提供多服务鉴权自动注入与自定�
 <dependency>
     <groupId>io.github.devoracode</groupId>
     <artifactId>feign-auth-spring-boot-starter</artifactId>
-    <version>1.19.0</version>
+    <version>2.0.0</version>
 </dependency>
 ```
 
@@ -37,7 +37,7 @@ Spring Boot Starter，为 OpenFeign 提供多服务鉴权自动注入与自定�
 - 动态 Header 注入：实现 `HeaderCustomizer` 接口，按服务维度注入任意动态计算的 Header
 - 可插拔缓存机制：支持本地缓存（ConcurrentHashMap）和 Redis 缓存，自动清理过期 Token
 - 可插拔锁机制：支持本地锁（分段 ReentrantLock）和 Redis 分布式锁，防止并发请求重复获取 Token
-- 无匹配服务时默认快速失败（抛 `FeignAuthConfigurationException`），可配置 `feign.auth.fail-on-no-match: false` 回退为 WARN 后放行
+- 无匹配服务时默认快速失败（抛 `FeignAuthConfigurationException`），可配置 `feign-auth.fail-on-no-match: false` 回退为 WARN 后放行
 
 ---
 
@@ -45,8 +45,10 @@ Spring Boot Starter，为 OpenFeign 提供多服务鉴权自动注入与自定�
 
 ### 1. 添加配置
 
+所有配置项都以 `feign-auth` 为根键（不再挂在 OpenFeign 自己占用的 `feign` 命名空间下），全局的 `cache` / `http` / `fail-on-no-match` 直接位于根键下，各服务配置在 `feign-auth.services.<name>` 下：
+
 ```yaml
-feign:
+feign-auth:
   services:
     order:
       base-url: https://api.example.com
@@ -63,7 +65,7 @@ feign:
 ```java
 @FeignClient(
     name = "order-client",
-    url = "${feign.services.order.base-url}",
+    url = "${feign-auth.services.order.base-url}",
     configuration = FeignClientConfig.class
 )
 public interface OrderFeignClient {
@@ -80,7 +82,7 @@ public interface OrderFeignClient {
 ## OAuth2 配置详解
 
 ```yaml
-feign:
+feign-auth:
   services:
     measure:
       base-url: https://api.service-a.com
@@ -145,7 +147,7 @@ POST 取号的请求体编码由 `token-request-headers` 中的 `Content-Type` �
 
 ### 客户端认证方式（client-authentication）
 
-`client_id` / `client_secret` 可以用两种方式发给 IdP：作为 token 请求参数（GET 进查询串、POST 进请求体），或按 RFC 6749 §2.3.1 的 `client_secret_basic` 放进 `Authorization: Basic` 头。`feign.services.<name>.auth.client-authentication` 选择用哪种，取值大小写不敏感，其他取值在启动期按配置键抛 `FeignAuthConfigurationException`：
+`client_id` / `client_secret` 可以用两种方式发给 IdP：作为 token 请求参数（GET 进查询串、POST 进请求体），或按 RFC 6749 §2.3.1 的 `client_secret_basic` 放进 `Authorization: Basic` 头。`feign-auth.services.<name>.auth.client-authentication` 选择用哪种，取值大小写不敏感，其他取值在启动期按配置键抛 `FeignAuthConfigurationException`：
 
 | 取值 | 行为 |
 |---|---|
@@ -174,7 +176,7 @@ GET /oauth/token?grant_type=client_credentials&client_id=<客户端ID>&client_se
 
 ### 凭据与传输安全
 
-**`token-url` 请使用 HTTPS**。配成明文 `http://` 时，`client_secret` 与返回的 access token 都明文过网，同网段中间人可直接取走；客户端凭证一旦泄露，等价于该 Client 的全部权限。starter 会在首次取号时按 authority（host:port）记一次 WARN，回环地址（`localhost`、`127.*`、`::1`）视为本地开发用法不提示。生产环境仍须自行确认 `token-url` 为 HTTPS，且未放宽证书校验——WARN 只是提醒，starter 不会拒发请求。
+**`token-url` 请使用 HTTPS**。配成明文 `http://` 时，`client_secret` 与返回的 access token 都明文过网，同网段中间人可直接取走；客户端凭证一旦泄露，等价于该 Client 的全部权限。starter 会在首次取号时按服务记一次 WARN（同一服务的多个 client 共用一个 `token-url`，因此每服务实际只有一条），回环地址（`localhost`、`127.*`、`::1`）视为本地开发用法不提示。生产环境仍须自行确认 `token-url` 为 HTTPS，且未放宽证书校验——WARN 只是提醒，starter 不会拒发请求。
 
 > 已知边界：`token-url` 缺少协议名（如写成 `127.0.0.1:8080/oauth/token`）时，GET/POST 都在请求期抛 `FeignAuthConfigurationException: Invalid token-url: <原值>`；使用非 HTTP(S) 协议（如 `ftp://`）时，报错仍在请求期且不含配置键——`FeignAuthTokenException: Token request failed: null`。排障时先核对 URL 写法。
 
@@ -188,17 +190,16 @@ GET /oauth/token?grant_type=client_credentials&client_id=<客户端ID>&client_se
 
 ## 令牌请求 HTTP 客户端
 
-OAuth2 取号走 starter 内置的 Apache HttpClient（连接池复用），参数通过 `feign.auth.http` 全局配置：
+OAuth2 取号走 starter 内置的 Apache HttpClient（连接池复用），参数通过 `feign-auth.http` 全局配置：
 
 ```yaml
-feign:
-  auth:
-    http:
-      connect-timeout: 5s                 # 连接超时
-      connection-request-timeout: 5s      # 从连接池获取连接的等待超时
-      socket-timeout: 10s                 # 读取超时
-      max-total: 200                      # 连接池最大连接数
-      default-max-per-route: 50           # 每个路由最大连接数
+feign-auth:
+  http:
+    connect-timeout: 5s                   # 连接超时
+    connection-request-timeout: 5s        # 从连接池获取连接的等待超时
+    socket-timeout: 10s                   # 读取超时
+    max-total: 200                        # 连接池最大连接数
+    default-max-per-route: 50             # 每个路由最大连接数
 ```
 
 三个超时都必须**严格大于 0**（且不足 1 毫秒的值也算非法）：Apache HttpClient 把 0 毫秒解释为"无限等待"，starter 不做静默钳制，启动阶段即抛 `FeignAuthConfigurationException` 并在信息里点名具体配置键。不支持"不限时"——取号请求悬死会拖住整个业务请求线程。
@@ -212,7 +213,7 @@ feign:
 ## API Key 配置
 
 ```yaml
-feign:
+feign-auth:
   services:
     console:
       base-url: https://api.service-d.com
@@ -253,9 +254,8 @@ feign:
 如需恢复旧版「记录 WARN 日志后不带鉴权头放行」的行为，可显式关闭：
 
 ```yaml
-feign:
-  auth:
-    fail-on-no-match: false   # 默认 true
+feign-auth:
+  fail-on-no-match: false   # 默认 true
 ```
 
 放行时记录的是 WARN，但**每个 baseUrl 只记录一次**（后续同一 baseUrl 的匹配失败降级为 DEBUG）：未匹配的请求会随每次调用重复触发，逐条记录只会淹没业务日志。
@@ -269,7 +269,7 @@ feign:
 ## 完整示例配置
 
 ```yaml
-feign:
+feign-auth:
   services:
 
     # OAuth2 — 多 Client，按路径匹配
@@ -483,7 +483,7 @@ public class NoReplayConfig {
     }
 }
 
-@FeignClient(name = "orders", url = "${feign.services.orders.base-url}",
+@FeignClient(name = "orders", url = "${feign-auth.services.orders.base-url}",
     configuration = {NoReplayConfig.class, FeignClientConfig.class})
 public interface OrdersClient { ... }
 ```
@@ -501,12 +501,11 @@ public interface OrdersClient { ... }
 支持两种缓存实现，通过配置切换：
 
 ```yaml
-feign:
-  auth:
-    cache:
-      provider: local  # local | redis，默认 local
-      redis:
-        key-prefix: feign-auth:  # Redis key 前缀，默认 feign-auth:
+feign-auth:
+  cache:
+    provider: local  # local | redis，默认 local
+    redis:
+      key-prefix: feign-auth:  # Redis key 前缀，默认 feign-auth:
 ```
 
 **Redis Key 格式说明**：
@@ -521,7 +520,7 @@ feign:
 | `local` | ConcurrentHashMap + 懒清理 | 单实例部署 |
 | `redis` | Redis + TTL | 多实例部署，共享 Token |
 
-> `feign.auth.cache.provider` 只接受 `local` 与 `redis`（**不区分大小写**，与 Spring `@ConditionalOnProperty` 的匹配口径一致）；拼错或配成空值时启动即抛 `FeignAuthConfigurationException` 并给出实际值。否则两组 Bean 的装配条件都不成立，报错只会指向「没有 RedisConnectionFactory」这一与根因无关的方向。
+> `feign-auth.cache.provider` 只接受 `local` 与 `redis`（**不区分大小写**，与 Spring `@ConditionalOnProperty` 的匹配口径一致）；拼错或配成空值时启动即抛 `FeignAuthConfigurationException` 并给出实际值。否则两组 Bean 的装配条件都不成立，报错只会指向「没有 RedisConnectionFactory」这一与根因无关的方向。
 
 **本地缓存特点**：
 - 使用 `ConcurrentHashMap` 存储，线程安全
@@ -531,8 +530,8 @@ feign:
 **Redis 缓存特点**：
 - 利用 Redis TTL 自动过期机制
 - 多实例共享 Token，避免重复获取
-- Spring Data Redis 已随 starter 传递引入，无需单独声明依赖；使用方只需配置 Redis 连接（`spring.redis.*` 等）使容器中存在 `RedisConnectionFactory`
-- 容器内**没有** `RedisConnectionFactory` 时（依赖被排除、`RedisAutoConfiguration` 被 exclude 等），启动即抛 `FeignAuthConfigurationException` 并在信息里点名 `feign.auth.cache.provider=redis` 与两种修法（补 Redis 配置或改回 `local`），不再是一句看不出根因的 `NoSuchBeanDefinitionException: TokenStore`。若使用方同时自备 `TokenStore` 与 `LockProvider`，Redis 连接是否存在都不受影响；只自备其一时，另一侧仍按上述规则快速失败。使用方自备 `TokenFetcher` 时本节的两条校验都不参与——此时 starter 的缓存装配整体让位，容器里没有任何组件消费 `TokenStore` / `LockProvider`
+- 使用 `provider: redis` 需自行声明 `org.springframework.boot:spring-boot-starter-data-redis`（starter 对它的依赖是 `optional`，不会传递进来），再配置 Redis 连接（`spring.redis.*` 等）使容器中存在 `RedisConnectionFactory`；只用 `provider: local` 时无需任何 Redis 依赖，classpath 上也不会出现 Spring Data Redis
+- 容器内**没有** `RedisConnectionFactory` 时（依赖被排除、`RedisAutoConfiguration` 被 exclude 等），启动即抛 `FeignAuthConfigurationException` 并在信息里点名 `feign-auth.cache.provider=redis` 与两种修法（补 Redis 配置或改回 `local`），不再是一句看不出根因的 `NoSuchBeanDefinitionException: TokenStore`。若使用方同时自备 `TokenStore` 与 `LockProvider`，Redis 连接是否存在都不受影响；只自备其一时，另一侧仍按上述规则快速失败。使用方自备 `TokenFetcher` 时本节的两条校验都不参与——此时 starter 的缓存装配整体让位，容器里没有任何组件消费 `TokenStore` / `LockProvider`
 - 存储格式：键为纯 String（见上方 Key 格式表），值为**固定类型的 JSON**（只含 `accessToken` / `ttl` / `expireAt` 三个字段，不带任何类型元数据），由 starter 自建的 `RedisTemplate`（`StringRedisSerializer` 键 + 令牌专用 JSON 序列化器值）读写，不借用容器中已有的 `RedisTemplate` / `StringRedisTemplate` 及其序列化器，因此使用方或其他组件的序列化配置不会破坏令牌读写
 - 令牌条目不写 `@class` 之类的类型信息，读取时也**不以值里的类名决定实例化哪个类**：即使 Redis 被第三方写入（共享实例、弱口令、与其他业务共库等），恶意载荷也只会被拒绝并清理，不会被实例化；早期版本写入的带 `@class` 条目仍可正常读出，无需清缓存
 - 排障时可直接 `GET feign-auth:token:{serviceName}:{clientId}` 查看内容；读到无法反序列化的值（旧格式残留、人为改写等）会 WARN 后删除，并在下次取号时按当前格式重建。注意该 JSON 内含令牌明文，Redis 实例需按敏感数据要求做访问控制与持久化策略

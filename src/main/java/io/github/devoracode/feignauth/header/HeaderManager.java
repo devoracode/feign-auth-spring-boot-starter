@@ -66,10 +66,17 @@ public class HeaderManager {
 			String requestPath, RequestTemplate template) {
 		Assert.notNull(template, "template must not be null");
 
+		Map<String, String> staticHeaders = service.getAuth().getRequestHeaders();
+		// 本方法每个业务请求都会执行一次，而「既没配 request-headers 也没注册定制器」就是默认配置：
+		// 这种情况下没有任何 header 要写，直接返回，不分配 HttpHeaders、也不做空遍历
+		if (this.customizers.isEmpty() && (staticHeaders == null || staticHeaders.isEmpty())) {
+			return;
+		}
+
 		HttpHeaders headers = new HttpHeaders();
 
 		// 阶段 1：来自 request-headers 配置的静态 header
-		applyStaticHeaders(service.getAuth().getRequestHeaders(), headers);
+		applyStaticHeaders(staticHeaders, headers);
 
 		// 阶段 2：来自 HeaderCustomizer Bean 的动态 header
 		if (!this.customizers.isEmpty()) {

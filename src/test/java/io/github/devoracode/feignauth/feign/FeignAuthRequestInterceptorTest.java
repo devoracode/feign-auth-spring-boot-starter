@@ -89,7 +89,7 @@ class FeignAuthRequestInterceptorTest {
 	@Test
 	void warnsButProceedsWhenFailOnNoMatchDisabledAndServiceNotFound() {
 		FeignAuthProperties properties = new FeignAuthProperties();
-		properties.getAuth().setFailOnNoMatch(false);
+		properties.setFailOnNoMatch(false);
 		FeignAuthRequestInterceptor interceptor = new FeignAuthRequestInterceptor(
 			new ServiceMatcher(properties), null, new HeaderManager(), properties);
 
@@ -100,10 +100,34 @@ class FeignAuthRequestInterceptorTest {
 	}
 
 	@Test
-	void nullGlobalAuthStillFailsWithConfigExceptionInsteadOfNpe() {
+	void authTypeVariantsResolveToTheSameBranchAfterTypeIsParsedOnce() {
+		FeignAuthProperties.Service apiKey = service("Api-Key", auth -> {
+			auth.setHeaderName("Authorization");
+			auth.setValue("sk-test");
+		});
+		RequestTemplate apiKeyTemplate = template("https://api.example.com", "/api/data");
+		interceptorWith(apiKey, null).apply(apiKeyTemplate);
+
+		FeignAuthProperties.Service oauth2 = service(" OAUTH2 ", auth -> {
+			auth.setTokenHeader("x-token");
+			auth.setClients(Collections.singletonList(new FeignAuthProperties.Client()));
+		});
+		TokenFetcher tokenFetcher = mock(TokenFetcher.class);
+		when(tokenFetcher.getToken(anyString(), anyString())).thenReturn("tok");
+		RequestTemplate oauth2Template = template("https://api.example.com", "/api/data");
+		interceptorWith(oauth2, tokenFetcher).apply(oauth2Template);
+
+		// 大小写与首尾空白的 type 变体必须仍然走对分支、拿到对的 header
+		assertThat(apiKeyTemplate.headers().get("Authorization")).containsExactly("sk-test");
+		assertThat(oauth2Template.headers().get("x-token")).containsExactly("tok");
+	}
+
+	@Test
+	void nullConfigBranchesStillFailWithConfigExceptionInsteadOfNpe() {
 		FeignAuthProperties properties = new FeignAuthProperties();
-		// 自定义 @Bean 场景可能把全局 auth 显式置空，此处必须仍是可读的配置异常
-		properties.setAuth(null);
+		// 自定义 @Bean 场景可能把全局配置节点显式置空，此处必须仍是可读的配置异常而不是 NPE
+		properties.setCache(null);
+		properties.setHttp(null);
 		FeignAuthRequestInterceptor interceptor = new FeignAuthRequestInterceptor(
 			new ServiceMatcher(properties), null, new HeaderManager(), properties);
 
@@ -153,7 +177,7 @@ class FeignAuthRequestInterceptorTest {
 	void throwsOnUnsupportedAuthTypeEvenWhenFailOnNoMatchDisabled() {
 		FeignAuthProperties.Service service = service("oauth", auth -> auth.setValue("ignored"));
 		FeignAuthProperties properties = new FeignAuthProperties();
-		properties.getAuth().setFailOnNoMatch(false);
+		properties.setFailOnNoMatch(false);
 		properties.getServices().put("order", service);
 		FeignAuthRequestInterceptor interceptor = new FeignAuthRequestInterceptor(new ServiceMatcher(properties),
 			null, new HeaderManager(), properties);
@@ -204,7 +228,7 @@ class FeignAuthRequestInterceptorTest {
 	@Test
 	void noMatchWarningIsLoggedOncePerBaseUrlAndLaterOccurrenceDropsToDebug() {
 		FeignAuthProperties properties = new FeignAuthProperties();
-		properties.getAuth().setFailOnNoMatch(false);
+		properties.setFailOnNoMatch(false);
 		FeignAuthRequestInterceptor interceptor = new FeignAuthRequestInterceptor(
 			new ServiceMatcher(properties), null, new HeaderManager(), properties);
 

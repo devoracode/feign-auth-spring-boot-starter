@@ -8,6 +8,19 @@ import io.github.devoracode.feignauth.exception.FeignAuthConfigurationException;
 import io.github.devoracode.feignauth.exception.FeignAuthTokenException;
 import io.github.devoracode.feignauth.feign.LogCaptures;
 import io.github.devoracode.feignauth.header.HeaderManager;
+import org.apache.http.HttpHost;
+import org.apache.http.HttpRequest;
+import org.apache.http.HttpVersion;
+import org.apache.http.client.methods.CloseableHttpResponse;
+import org.apache.http.conn.ClientConnectionManager;
+import org.apache.http.entity.AbstractHttpEntity;
+import org.apache.http.entity.ContentType;
+import org.apache.http.entity.StringEntity;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.message.BasicHttpResponse;
+import org.apache.http.message.BasicStatusLine;
+import org.apache.http.params.HttpParams;
+import org.apache.http.protocol.HttpContext;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -296,7 +309,7 @@ class OAuth2TokenRequestClientTest {
 	void nullContentStreamIsReadAsEmptyBodyInsteadOfThrowing() throws IOException {
 		// 此前交给 EntityUtils.toString 时，内容流为 null 会直接得到 null 正文；自己读流后必须保持
 		// 同样的容忍，否则 NPE 会被锁包装器改写成「Error executing with lock…」，掩盖真实原因
-		OAuth2TokenRequestClient.ResponseBody body = OAuth2TokenRequestClient.readBody(null, StandardCharsets.UTF_8);
+		TokenResponseBodyReader.ResponseBody body = TokenResponseBodyReader.readBody(null, StandardCharsets.UTF_8);
 
 		assertThat(body.getText()).isNull();
 		assertThat(body.isTruncated()).isFalse();
@@ -326,7 +339,7 @@ class OAuth2TokenRequestClientTest {
 		http.setSocketTimeout(Duration.ZERO);
 
 		assertThatThrownBy(() -> createClient(http)).isInstanceOf(FeignAuthConfigurationException.class)
-				.hasMessageContaining("feign.auth.http.socket-timeout");
+				.hasMessageContaining("feign-auth.http.socket-timeout");
 	}
 
 	@Test
@@ -335,7 +348,7 @@ class OAuth2TokenRequestClientTest {
 		http.setConnectTimeout(Duration.ofSeconds(-1));
 
 		assertThatThrownBy(() -> createClient(http)).isInstanceOf(FeignAuthConfigurationException.class)
-				.hasMessageContaining("feign.auth.http.connect-timeout");
+				.hasMessageContaining("feign-auth.http.connect-timeout");
 	}
 
 	@Test
@@ -344,7 +357,7 @@ class OAuth2TokenRequestClientTest {
 		http.setConnectionRequestTimeout(Duration.ofNanos(500_000));
 
 		assertThatThrownBy(() -> createClient(http)).isInstanceOf(FeignAuthConfigurationException.class)
-				.hasMessageContaining("feign.auth.http.connection-request-timeout");
+				.hasMessageContaining("feign-auth.http.connection-request-timeout");
 	}
 
 	@Test
@@ -353,7 +366,7 @@ class OAuth2TokenRequestClientTest {
 		http.setSocketTimeout(null);
 
 		assertThatThrownBy(() -> createClient(http)).isInstanceOf(FeignAuthConfigurationException.class)
-				.hasMessageContaining("feign.auth.http.socket-timeout");
+				.hasMessageContaining("feign-auth.http.socket-timeout");
 	}
 
 	@Test
@@ -372,7 +385,8 @@ class OAuth2TokenRequestClientTest {
 
 	@Test
 	void parametersModePutsCredentialsBackIntoTheQueryAndWarnsOnce() {
-		LogCaptures logs = LogCaptures.attach(OAuth2TokenRequestClient.class);
+		// 这条 WARN 由 TokenEndpointWarnings 发出，logger 名跟着协作类走
+		LogCaptures logs = LogCaptures.attach(TokenEndpointWarnings.class);
 		try {
 			AtomicReference<RecordedRequest> recorded = recordTokenRequests();
 
@@ -489,8 +503,9 @@ class OAuth2TokenRequestClientTest {
 	}
 
 	@Test
-	void insecureTokenUrlWarnsOncePerAuthorityAndStaysQuietOnLoopback() {
-		LogCaptures logs = LogCaptures.attach(OAuth2TokenRequestClient.class);
+	void insecureTokenUrlWarnsOncePerServiceAndStaysQuietOnLoopback() {
+		// 去重键与这条 WARN 都在 TokenEndpointWarnings 里，按客户端实例隔离
+		LogCaptures logs = LogCaptures.attach(TokenEndpointWarnings.class);
 		try {
 			OAuth2TokenRequestClient client = createClient(shortTimeoutHttp());
 			// 192.0.2.0/24 是保留的文档网段，不会真的连出去
@@ -498,23 +513,84 @@ class OAuth2TokenRequestClientTest {
 			FeignAuthProperties.Service sameAuthority = service("http://192.0.2.1:9/token");
 			FeignAuthProperties.Service otherAuthority = service("http://192.0.2.2:9/token");
 
-			for (FeignAuthProperties.Service candidate : Arrays.asList(first, sameAuthority, otherAuthority)) {
-				probeTokenRequest(client, candidate);
-			}
-			assertThat(logs.count(Level.WARN)).isEqualTo(2L);
+			// 去重键含服务名：同一个 authority 下的两个服务各提醒一次（否则第二个服务的配置无从定位），
+			// 同一服务反复取号只提醒一次
+			probeTokenRequest(client, "alpha", first);
+			probeTokenRequest(client, "beta", sameAuthority);
+			probeTokenRequest(client, "gamma", otherAuthority);
+			probeTokenRequest(client, "gamma", otherAuthority);
+			assertThat(logs.count(Level.WARN)).isEqualTo(3L);
+			assertThat(logs.contains(Level.WARN, "token-url 'http://192.0.2.1:9/token' of service 'beta'")).isTrue();
 
 			// 本地开发的明文回环地址是正常用法，不该刷 WARN
-			probeTokenRequest(client, service(this.tokenUrl));
-			assertThat(logs.count(Level.WARN)).isEqualTo(2L);
+			probeTokenRequest(client, "loopback", service(this.tokenUrl));
+			assertThat(logs.count(Level.WARN)).isEqualTo(3L);
 		}
 		finally {
 			logs.detach();
 		}
 	}
 
-	private static void probeTokenRequest(OAuth2TokenRequestClient client, FeignAuthProperties.Service service) {
+	@Test
+	void responseCloseFailureAfterAParsedTokenKeepsTheTokenAndOnlyWarns() {
+		LogCaptures logs = LogCaptures.attach(OAuth2TokenRequestClient.class);
 		try {
-			client.requestToken("svc", service, clientCredentials());
+			OAuth2TokenRequestClient client = clientReturning(tokenResponse(200), null);
+
+			// 令牌已经解析到手，归还连接时再出问题只该提醒，不该把取号结果一起作废
+			OAuth2AccessToken token = client.requestToken("svc", service(this.tokenUrl), clientCredentials());
+
+			assertThat(token.getAccessToken()).isEqualTo("t");
+			assertThat(logs.contains(Level.WARN, "Failed to close token response")).isTrue();
+			assertThat(logs.count(Level.WARN)).isEqualTo(1L);
+		}
+		finally {
+			logs.detach();
+		}
+	}
+
+	@Test
+	void transportFailureStillFailsTheTokenRequest() {
+		OAuth2TokenRequestClient client = clientReturning(null, new IOException("connection refused"));
+
+		assertThatThrownBy(() -> client.requestToken("svc", service(this.tokenUrl), clientCredentials()))
+				.isInstanceOf(FeignAuthTokenException.class)
+				.hasStackTraceContaining("Token request failed: connection refused");
+	}
+
+	@Test
+	void bodyReadFailureKeepsItsOwnCauseWhenCloseAlsoFails() {
+		LogCaptures logs = LogCaptures.attach(OAuth2TokenRequestClient.class);
+		try {
+			FaultyCloseResponse response = tokenResponse(200);
+			response.setEntity(new UnreadableEntity());
+			OAuth2TokenRequestClient client = clientReturning(response, null);
+
+			// 读正文先失败时，主因仍是读失败；close 的那条只能进日志，不能顶替或改写它
+			assertThatThrownBy(() -> client.requestToken("svc", service(this.tokenUrl), clientCredentials()))
+					.isInstanceOf(FeignAuthTokenException.class)
+					.hasStackTraceContaining("Token request failed: body stream broke halfway");
+			assertThat(logs.contains(Level.WARN, "Failed to close token response")).isTrue();
+		}
+		finally {
+			logs.detach();
+		}
+	}
+
+	@Test
+	void errorResponseIsStillDescribedWhenCloseFails() {
+		OAuth2TokenRequestClient client = clientReturning(tokenResponse(500), null);
+
+		// 非 2xx 由解析器给出原因，close 失败不参与结果
+		assertThatThrownBy(() -> client.requestToken("svc", service(this.tokenUrl), clientCredentials()))
+				.isInstanceOf(FeignAuthTokenException.class)
+				.hasStackTraceContaining("Token request failed: 500");
+	}
+
+	private static void probeTokenRequest(OAuth2TokenRequestClient client, String serviceName,
+			FeignAuthProperties.Service service) {
+		try {
+			client.requestToken(serviceName, service, clientCredentials());
 		}
 		catch (Exception ex) {
 			// 本测试只关心取号前发出的 WARN，连不上是预期内的
@@ -552,6 +628,104 @@ class OAuth2TokenRequestClientTest {
 		private String authorization;
 
 		private String body;
+
+	}
+
+	private OAuth2TokenRequestClient clientReturning(CloseableHttpResponse response, IOException transportFailure) {
+		return new OAuth2TokenRequestClient(new OAuth2TokenResponseParser(new ObjectMapper()), new HeaderManager(),
+				new ObjectMapper(), new StubHttpClient(response, transportFailure));
+	}
+
+	private static FaultyCloseResponse tokenResponse(int status) {
+		FaultyCloseResponse response = new FaultyCloseResponse(status);
+		response.setEntity(new StringEntity("{\"access_token\":\"t\",\"expires_in\":600}", ContentType.APPLICATION_JSON));
+		return response;
+	}
+
+	// 无论取号结果如何都要抛出的 close()，用来验证响应归还失败不改变结果
+	private static final class FaultyCloseResponse extends BasicHttpResponse implements CloseableHttpResponse {
+
+		private FaultyCloseResponse(int status) {
+			super(new BasicStatusLine(HttpVersion.HTTP_1_1, status, "stub"));
+		}
+
+		@Override
+		public void close() throws IOException {
+			throw new IOException("connection is being destroyed");
+		}
+
+	}
+
+	private static final class UnreadableEntity extends AbstractHttpEntity {
+
+		@Override
+		public boolean isRepeatable() {
+			return false;
+		}
+
+		@Override
+		public long getContentLength() {
+			return -1L;
+		}
+
+		@Override
+		public InputStream getContent() {
+			return new InputStream() {
+				@Override
+				public int read() throws IOException {
+					throw new IOException("body stream broke halfway");
+				}
+			};
+		}
+
+		@Override
+		public boolean isStreaming() {
+			return true;
+		}
+
+		@Override
+		public void writeTo(OutputStream outStream) {
+			throw new UnsupportedOperationException();
+		}
+
+	}
+
+	private static final class StubHttpClient extends CloseableHttpClient {
+
+		private final CloseableHttpResponse response;
+
+		private final IOException transportFailure;
+
+		private StubHttpClient(CloseableHttpResponse response, IOException transportFailure) {
+			this.response = response;
+			this.transportFailure = transportFailure;
+		}
+
+		@Override
+		protected CloseableHttpResponse doExecute(HttpHost target, HttpRequest request, HttpContext context)
+				throws IOException {
+			if (this.transportFailure != null) {
+				throw this.transportFailure;
+			}
+			return this.response;
+		}
+
+		@Override
+		public void close() {
+			// 这里没有连接池要关
+		}
+
+		@Override
+		@SuppressWarnings("deprecation")
+		public ClientConnectionManager getConnectionManager() {
+			return null;
+		}
+
+		@Override
+		@SuppressWarnings("deprecation")
+		public HttpParams getParams() {
+			return null;
+		}
 
 	}
 

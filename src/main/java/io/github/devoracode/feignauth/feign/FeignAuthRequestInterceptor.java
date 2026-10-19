@@ -7,13 +7,13 @@ import io.github.devoracode.feignauth.exception.FeignAuthConfigurationException;
 import io.github.devoracode.feignauth.exception.FeignAuthTokenException;
 import io.github.devoracode.feignauth.header.HeaderManager;
 import io.github.devoracode.feignauth.oauth2.TokenFetcher;
+import io.github.devoracode.feignauth.support.AuthType;
 import io.github.devoracode.feignauth.support.PathUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.springframework.util.Assert;
 
-import java.net.URI;
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -60,11 +60,10 @@ public class FeignAuthRequestInterceptor implements RequestInterceptor {
         String baseUrl;
         String targetPathPrefix;
         try {
-            URI uri = URI.create(targetUrl);
-            String path = StringUtils.isNotBlank(uri.getRawPath()) ? uri.getRawPath() : "";
-            baseUrl = uri.getScheme() + "://" + uri.getAuthority();
-            targetPathPrefix = StringUtils.stripEnd(path, "/");
-        } catch (Exception ex) {
+            UrlParts urlParts = UrlParts.parse(targetUrl);
+            baseUrl = urlParts.getBaseUrl();
+            targetPathPrefix = StringUtils.stripEnd(urlParts.getRawPath(), "/");
+        } catch (RuntimeException ex) {
             baseUrl = targetUrl;
             targetPathPrefix = "";
         }
@@ -78,14 +77,14 @@ public class FeignAuthRequestInterceptor implements RequestInterceptor {
 
         ResolvedService resolved = this.serviceMatcher.match(baseUrl, requestPath);
         if (resolved == null) {
-            if (this.properties.getAuth().isFailOnNoMatch()) {
+            if (this.properties.isFailOnNoMatch()) {
                 throw new FeignAuthConfigurationException(
                     "FeignAuth: no service config matched for baseUrl=" + baseUrl + ", path=" + requestPath
                         + "; configured services: " + describeConfiguredServices()
                         + "; the Feign target URL must point to the same scheme/host/port as"
-                        + " feign.services.<name>.base-url (default ports 80/443 are normalized, a base-url path is"
+                        + " feign-auth.services.<name>.base-url (default ports 80/443 are normalized, a base-url path is"
                         + " treated as an outer prefix for path matching)"
-                        + "; set feign.auth.fail-on-no-match=false to send unmatched requests without auth headers");
+                        + "; set feign-auth.fail-on-no-match=false to send unmatched requests without auth headers");
             }
             if (this.noMatchWarnings.shouldWarn(baseUrl)) {
                 logger.warn("FeignAuth: no service config matched for baseUrl=" + baseUrl + ", path=" + requestPath
@@ -102,12 +101,14 @@ public class FeignAuthRequestInterceptor implements RequestInterceptor {
         // ServiceMatcher 已拒绝非法 auth，此处仅作防御
         if (auth == null) {
             throw new FeignAuthConfigurationException("FeignAuth: service '" + resolved.getServiceName()
-                + "' has no auth config — fix feign.services." + resolved.getServiceName() + ".auth");
+                + "' has no auth config — fix feign-auth.services." + resolved.getServiceName() + ".auth");
         }
 
-        if (auth.isApiKey()) {
+        // 认证类型只解析一次：isApiKey()/isOAuth2() 各自都要重扫一遍枚举，而本方法每个请求都会执行
+        AuthType authType = AuthType.from(auth.getType());
+        if (authType == AuthType.API_KEY) {
             applyApiKey(template, resolved, auth, requestPath);
-        } else if (auth.isOAuth2()) {
+        } else if (authType == AuthType.OAUTH2) {
             applyOAuth2(template, resolved, auth, requestPath);
         } else {
             throw new FeignAuthConfigurationException("FeignAuth: service '" + resolved.getServiceName()

@@ -190,6 +190,8 @@ class FeignAuthErrorDecoderTest {
 		assertThat(tokenRequestClient.getRequestCount()).isEqualTo(2);
 	}
 
+	// 冷却窗口硬编码 30 秒、无时钟注入口，本用例要的是「冷却已过」这一半（「冷却期内不驱逐」已由
+	// TokenFetcherTest 走公开 API 覆盖），只能反射把时间戳设成 60 秒前；改名时当场抛 NoSuchFieldException
 	@SuppressWarnings("unchecked")
 	private static void seedLastEvictionMillis(TokenFetcher fetcher, String cacheKey, long millis) throws Exception {
 		Field field = TokenFetcher.class.getDeclaredField("lastEvictionMillis");

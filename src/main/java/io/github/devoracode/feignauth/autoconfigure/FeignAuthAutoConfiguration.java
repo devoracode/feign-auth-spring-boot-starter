@@ -72,47 +72,55 @@ public class FeignAuthAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(TokenStore.class)
-    @ConditionalOnProperty(prefix = "feign.auth.cache", name = "provider", havingValue = "local",
+    @ConditionalOnProperty(prefix = "feign-auth.cache", name = "provider", havingValue = "local",
         matchIfMissing = true)
     public TokenStore tokenStore() {
         return new LocalTokenStore();
     }
 
     @Bean
-    @ConditionalOnMissingBean(TokenStore.class)
-    @ConditionalOnClass(RedisConnectionFactory.class)
-    @ConditionalOnBean(RedisConnectionFactory.class)
-    @ConditionalOnProperty(prefix = "feign.auth.cache", name = "provider", havingValue = "redis")
-    public TokenStore redisTokenStore(RedisConnectionFactory redisConnectionFactory,
-                                      FeignAuthProperties properties) {
-        return new RedisTokenStore(redisConnectionFactory, properties.getAuth().getCache().getRedis());
-    }
-
-    @Bean
     @ConditionalOnMissingBean(LockProvider.class)
-    @ConditionalOnProperty(prefix = "feign.auth.cache", name = "provider",
+    @ConditionalOnProperty(prefix = "feign-auth.cache", name = "provider",
         havingValue = "local", matchIfMissing = true)
     public LockProvider lockProvider() {
         return new LocalLockProvider();
     }
 
-    @Bean
-    @ConditionalOnMissingBean(LockProvider.class)
-    @ConditionalOnClass(RedisConnectionFactory.class)
-    @ConditionalOnBean(RedisConnectionFactory.class)
-    @ConditionalOnProperty(prefix = "feign.auth.cache",
-        name = "provider", havingValue = "redis")
-    public LockProvider redisLockProvider(RedisConnectionFactory redisConnectionFactory,
-                                          FeignAuthProperties properties) {
-        // 自建 StringRedisTemplate：不依赖容器里是否存在同名/同类型 Bean
-        return new RedisLockProvider(new StringRedisTemplate(redisConnectionFactory),
-            properties.getAuth().getCache().getRedis());
+    private static String redisCacheNotAvailable() {
+        return "FeignAuth: feign-auth.cache.provider=redis but no RedisConnectionFactory is available in the"
+            + " context; add spring-boot-starter-data-redis and configure spring.redis.*, or set"
+            + " feign-auth.cache.provider=local for the in-memory cache";
     }
 
-    private static String redisCacheNotAvailable() {
-        return "FeignAuth: feign.auth.cache.provider=redis but no RedisConnectionFactory is available in the"
-            + " context; add spring-boot-starter-data-redis and configure spring.redis.*, or set"
-            + " feign.auth.cache.provider=local for the in-memory cache";
+    // 两个 Redis Bean 必须待在 @ConditionalOnClass 守卫的嵌套类里，不能挂在外层类上：
+    // spring-boot-starter-data-redis 是 optional 依赖，缺省时外层类自己的某个 @Bean 做类型解析会触发
+    // ReflectionUtils.getUniqueDeclaredMethods()（内部调用 Class.getDeclaredMethods()，需要解析类里
+    // *每一个*方法描述符），外层方法签名上的 RedisConnectionFactory 直接抛 ClassNotFoundException，
+    // 连 provider=local 的正常应用都启动失败。嵌套类被条件挡掉时不会注册，也就不会被反射解析。
+    @Configuration(proxyBeanMethods = false)
+    @ConditionalOnClass(RedisConnectionFactory.class)
+    static class RedisCacheConfiguration {
+
+        @Bean
+        @ConditionalOnMissingBean(TokenStore.class)
+        @ConditionalOnBean(RedisConnectionFactory.class)
+        @ConditionalOnProperty(prefix = "feign-auth.cache", name = "provider", havingValue = "redis")
+        public TokenStore redisTokenStore(RedisConnectionFactory redisConnectionFactory,
+                                          FeignAuthProperties properties) {
+            return new RedisTokenStore(redisConnectionFactory, properties.getCache().getRedis());
+        }
+
+        @Bean
+        @ConditionalOnMissingBean(LockProvider.class)
+        @ConditionalOnBean(RedisConnectionFactory.class)
+        @ConditionalOnProperty(prefix = "feign-auth.cache", name = "provider", havingValue = "redis")
+        public LockProvider redisLockProvider(RedisConnectionFactory redisConnectionFactory,
+                                              FeignAuthProperties properties) {
+            // 自建 StringRedisTemplate：不依赖容器里是否存在同名/同类型 Bean
+            return new RedisLockProvider(new StringRedisTemplate(redisConnectionFactory),
+                properties.getCache().getRedis());
+        }
+
     }
 
     @Configuration(proxyBeanMethods = false)
@@ -125,7 +133,7 @@ public class FeignAuthAutoConfiguration {
                                                           FeignAuthProperties properties) {
             // 注册为容器 Bean：close() 会被推断为 destroyMethod，上下文关闭时释放连接池
             return new OAuth2TokenRequestClient(new OAuth2TokenResponseParser(objectMapper), headerManager,
-                objectMapper, properties.getAuth().getHttp());
+                objectMapper, properties.getHttp());
         }
 
         // TokenStore / LockProvider 用 ObjectProvider 取而不是按类型注入：provider=redis 而容器里没有 Redis

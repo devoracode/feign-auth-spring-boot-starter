@@ -72,7 +72,7 @@ class FeignClientConfigTest {
 
 		FeignAuthRequestInterceptor interceptor = interceptor(properties);
 
-		// 典型写法：@FeignClient(url = "${feign.services.orders.base-url}")，target URL 与配置完全一致
+		// 典型写法：@FeignClient(url = "${feign-auth.services.orders.base-url}")，target URL 与配置完全一致
 		assertThat(interceptor.matchService("https://api.service-d.com", "/v1/api/orders/1").getServiceName())
 				.isEqualTo("orders");
 	}
@@ -105,7 +105,7 @@ class FeignClientConfigTest {
 	@Test
 	void rejectsUnsupportedAuthTypeEvenWhenFailOnNoMatchDisabled() {
 		FeignAuthProperties properties = new FeignAuthProperties();
-		properties.getAuth().setFailOnNoMatch(false);
+		properties.setFailOnNoMatch(false);
 		properties.setServices(new LinkedHashMap<>());
 		FeignAuthProperties.Service service = new FeignAuthProperties.Service();
 		service.setBaseUrl("https://api.service-d.com");

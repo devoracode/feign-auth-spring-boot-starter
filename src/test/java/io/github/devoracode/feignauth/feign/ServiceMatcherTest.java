@@ -154,26 +154,58 @@ class ServiceMatcherTest {
 	}
 
 	@Test
+	void authTypeIsParsedIgnoringCaseAndSurroundingWhitespace() {
+		// 认证类型收敛为每请求解析一次后，大小写与首尾空白变体的判定必须完全不变
+		FeignAuthProperties.Service apiKey = service("order", "https://api.example.com", "Api-Key", "/api/orders")
+				.getValue();
+		assertThat(new ServiceMatcher(properties(entry("order", apiKey)))
+				.match("https://api.example.com", "/api/orders/1").getServiceName()).isEqualTo("order");
+
+		// oauth2 写成一串大写带空格时，client 前缀匹配与 fallback 判定都要照常生效
+		FeignAuthProperties.Service oauth2 = service("telemetry", "https://api.example.com", " OAUTH2 ").getValue();
+		oauth2.getAuth().setClients(Arrays.asList(client("reading", "/api/measure"), client("fallback")));
+		ServiceMatcher matcher = new ServiceMatcher(properties(entry("telemetry", oauth2)));
+
+		assertThat(matcher.match("https://api.example.com", "/api/measure/read/1").getServiceName())
+				.isEqualTo("telemetry");
+		// oauth2 的 fallback 看的是 default client，而不是 auth.path-prefixes
+		assertThat(matcher.match("https://api.example.com", "/api/other").getServiceName()).isEqualTo("telemetry");
+	}
+
+	@Test
+	void blankAuthTypeIsInvalidAndQuotedVerbatimInTheMessage() {
+		ServiceMatcher matcher = new ServiceMatcher(properties(
+				service("order", "https://api.example.com", "   ", "/api/orders")));
+
+		assertThatThrownBy(() -> matcher.match("https://api.example.com", "/api/orders/1"))
+				.isInstanceOf(FeignAuthConfigurationException.class)
+				.hasMessage("FeignAuth: service(s) matched baseUrl=https://api.example.com but have invalid auth"
+						+ " config: order (unsupported auth.type '   ', expected 'oauth2' or 'api-key')");
+	}
+
+	@Test
 	void urlDerivedValuesAreMemoizedUpToTheCap() throws Exception {
 		ServiceMatcher matcher = new ServiceMatcher(properties(
 				service("order", "https://api.example.com", "api-key", "/api/orders")));
-		ConcurrentMap<?, ?> authorityCache = cache(matcher, "authorityCache");
+		ConcurrentMap<?, ?> urlCache = cache(matcher, "urlCache");
 
 		matcher.match("https://api.example.com", "/api/orders/1");
-		int afterFirstRequest = authorityCache.size();
+		int afterFirstRequest = urlCache.size();
 		matcher.match("https://api.example.com", "/api/orders/2");
 
 		// 同一 URL 重复请求不再重新解析，也不会往缓存里追加条目
-		assertThat(authorityCache).hasSize(afterFirstRequest);
+		assertThat(urlCache).hasSize(afterFirstRequest);
 		assertThat(afterFirstRequest).isPositive();
 
 		// 动态 target URL 不该让缓存无界增长
 		for (int i = 0; i < EXPECTED_URL_CACHE_CAP + 50; i++) {
 			matcher.match("https://host-" + i + ".example.com", "/api/orders/1");
 		}
-		assertThat(authorityCache).hasSize(EXPECTED_URL_CACHE_CAP);
+		assertThat(urlCache).hasSize(EXPECTED_URL_CACHE_CAP);
 	}
 
+	// 记忆化与缓存上限都无对外契约（重解析与走缓存结果相同），只能反射读内部 map 钉住；
+	// 字段改名时这里当场抛 NoSuchFieldException，不会静默漏
 	private static ConcurrentMap<?, ?> cache(ServiceMatcher matcher, String fieldName) throws Exception {
 		Field field = ServiceMatcher.class.getDeclaredField(fieldName);
 		field.setAccessible(true);
@@ -208,6 +240,14 @@ class ServiceMatcherTest {
 		}
 		service.setAuth(auth);
 		return entry(name, service);
+	}
+
+	private static FeignAuthProperties.Client client(String id, String... prefixes) {
+		FeignAuthProperties.Client client = new FeignAuthProperties.Client();
+		client.setId(id);
+		client.setSecret("secret");
+		client.setPathPrefixes(Arrays.asList(prefixes));
+		return client;
 	}
 
 	private static Map.Entry<String, FeignAuthProperties.Service> oauth2Service(String name, String baseUrl,

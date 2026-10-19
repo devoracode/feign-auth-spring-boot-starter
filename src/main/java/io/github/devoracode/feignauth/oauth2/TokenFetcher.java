@@ -39,7 +39,8 @@ public class TokenFetcher {
 
 	private final LockProvider lockProvider;
 
-	/** 各缓存键最近一次淘汰令牌的时间戳（毫秒），用于冷却判定 */
+	/** 各缓存键最近一次淘汰令牌的时间戳（毫秒），用于冷却判定。
+	 *  冷却窗口硬编码 30 秒且没有时钟注入口，「冷却已过」那一半分支由 FeignAuthErrorDecoderTest 反射写入旧时间戳覆盖 */
 	private final Map<String, Long> lastEvictionMillis = new ConcurrentHashMap<>();
 
 	public TokenFetcher(FeignAuthProperties properties, OAuth2ClientMatcher clientMatcher,

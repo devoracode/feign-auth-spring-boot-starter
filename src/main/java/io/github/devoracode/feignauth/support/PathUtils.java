@@ -154,27 +154,10 @@ public final class PathUtils {
 	 *
 	 * @param url 待归一化的 URL
 	 * @return 归一化后的 authority 键；{@code url} 空白或无法解析时返回 {@code null}
+	 * @see #parseBaseUrl(String)
 	 */
 	public static String normalizeBaseUrlAuthority(String url) {
-		if (StringUtils.isBlank(url)) {
-			return null;
-		}
-		try {
-			URI uri = URI.create(url.trim());
-			String scheme = uri.getScheme();
-			String host = uri.getHost();
-			if (StringUtils.isBlank(scheme) || StringUtils.isBlank(host)) {
-				return null;
-			}
-			int port = uri.getPort();
-			if (port < 0) {
-				port = defaultPort(scheme);
-			}
-			String authority = scheme.toLowerCase(Locale.ROOT) + "://" + host.toLowerCase(Locale.ROOT);
-			return port > 0 ? authority + ":" + port : authority;
-		} catch (IllegalArgumentException ex) {
-			return null;
-		}
+		return parseBaseUrl(url).getAuthority();
 	}
 
 	/**
@@ -190,19 +173,97 @@ public final class PathUtils {
 	 *
 	 * @param url 待提取的 URL
 	 * @return 归一化后的路径；无路径、{@code url} 空白或无法解析时返回空字符串
+	 * @see #parseBaseUrl(String)
 	 */
 	public static String baseUrlPath(String url) {
+		return parseBaseUrl(url).getBasePath();
+	}
+
+	/**
+	 * 一次性解析 base-url，同时给出 authority 与路径段两个派生值。
+	 *
+	 * <p><b>两个派生值的回退是各自独立的：</b>authority 取不到（相对 URL、scheme 缺失）时返回
+	 * {@code null}，由调用方决定如何回退；basePath 取不到时返回空串。合并解析不能把两者绑在一起——
+	 * 例如 {@code "orders"} 解析成功但没有 authority，它的 basePath 仍是 {@code "/orders"}。
+	 *
+	 * <p><b>示例：</b></p>
+	 * <pre>{@code
+	 * PathUtils.parseBaseUrl("https://API.example.com/v1/").getAuthority()  // "https://api.example.com:443"
+	 * PathUtils.parseBaseUrl("https://API.example.com/v1/").getBasePath()   // "/v1"
+	 * PathUtils.parseBaseUrl("orders").getAuthority()                       // null
+	 * PathUtils.parseBaseUrl("orders").getBasePath()                        // "/orders"
+	 * }</pre>
+	 *
+	 * @param url 待解析的 URL
+	 * @return 解析结果；{@code url} 空白或无法解析时为 {@link BaseUrlParts#EMPTY}，不为 {@code null}
+	 * @since 2.0.0
+	 */
+	public static BaseUrlParts parseBaseUrl(String url) {
 		if (StringUtils.isBlank(url)) {
-			return "";
+			return BaseUrlParts.EMPTY;
 		}
 		try {
 			URI uri = URI.create(url.trim());
-			// 与请求路径同口径折叠连续斜杠：否则 base-url 写成 https://api.x.com/api//v1 时，
-			// 配置侧路径剥不掉已归一化的请求路径，配置的路径段作为外层前缀会静默失效
-			return StringUtils.stripEnd(normalizeRequestPath(StringUtils.defaultString(uri.getRawPath())), "/");
+			return new BaseUrlParts(authorityOf(uri), pathOf(uri));
 		} catch (IllegalArgumentException ex) {
-			return "";
+			return BaseUrlParts.EMPTY;
 		}
+	}
+
+	private static String authorityOf(URI uri) {
+		String scheme = uri.getScheme();
+		String host = uri.getHost();
+		if (StringUtils.isBlank(scheme) || StringUtils.isBlank(host)) {
+			return null;
+		}
+		int port = uri.getPort();
+		if (port < 0) {
+			port = defaultPort(scheme);
+		}
+		String authority = scheme.toLowerCase(Locale.ROOT) + "://" + host.toLowerCase(Locale.ROOT);
+		return port > 0 ? authority + ":" + port : authority;
+	}
+
+	private static String pathOf(URI uri) {
+		// 与请求路径同口径折叠连续斜杠：否则 base-url 写成 https://api.x.com/api//v1 时，
+		// 配置侧路径剥不掉已归一化的请求路径，配置的路径段作为外层前缀会静默失效
+		return StringUtils.stripEnd(normalizeRequestPath(StringUtils.defaultString(uri.getRawPath())), "/");
+	}
+
+	/**
+	 * {@link #parseBaseUrl(String)} 的结果：同一个 URL 一次解析得到的两个派生值。
+	 *
+	 * @author Wenjie Liu
+	 * @since 2.0.0
+	 */
+	public static final class BaseUrlParts {
+
+		/** 无 authority、无路径段：对应空白或无法解析的 URL。 */
+		public static final BaseUrlParts EMPTY = new BaseUrlParts(null, "");
+
+		private final String authority;
+
+		private final String basePath;
+
+		private BaseUrlParts(String authority, String basePath) {
+			this.authority = authority;
+			this.basePath = basePath;
+		}
+
+		/**
+		 * @return {@code scheme://host:port}；无法得到 authority（相对 URL、scheme 缺失）时返回 {@code null}
+		 */
+		public String getAuthority() {
+			return this.authority;
+		}
+
+		/**
+		 * @return 归一化后的路径段；无路径时返回空串，不为 {@code null}
+		 */
+		public String getBasePath() {
+			return this.basePath;
+		}
+
 	}
 
 	private static int defaultPort(String scheme) {
