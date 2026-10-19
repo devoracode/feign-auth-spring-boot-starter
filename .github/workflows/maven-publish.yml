@@ -35,7 +35,9 @@ jobs:
       run: mvn --batch-mode clean
 
     - name: Publish to Maven Central
-      run: mvn --batch-mode deploy -DskipTests
+      # 发布专属插件（sources/javadoc jar、GPG 签名、Central 上传）都在 release profile 里，
+      # 不带 -Prelease 就只会 build 出未签名的裸 jar 并上传失败
+      run: mvn --batch-mode deploy -DskipTests -Prelease
       env:
         CENTRAL_USERNAME: ${{ secrets.CENTRAL_TOKEN_USERNAME }}
         CENTRAL_PASSWORD: ${{ secrets.CENTRAL_TOKEN_PASSWORD }}
