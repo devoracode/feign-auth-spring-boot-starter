@@ -1,5 +1,6 @@
 package io.github.devoracode.feignauth.feign;
 
+import ch.qos.logback.classic.Level;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import feign.FeignException;
 import feign.Request;
@@ -11,6 +12,8 @@ import io.github.devoracode.feignauth.exception.FeignAuthTokenException;
 import io.github.devoracode.feignauth.oauth2.TokenFetcher;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Collection;
@@ -21,6 +24,7 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
@@ -132,6 +136,62 @@ class FeignAuthStatusMessageTest {
 				+ " OAuth2 token eviction skipped (cooldown or cache empty), request not retried");
 	}
 
+	// ── 远程正文的读取 ──────────────────────────────────────────────────────
+
+	@Test
+	void partialBodySurvivesAReadFailureForTheFeignCause() {
+		FeignAuthProperties.Service service = oauth2Service("measure", BASE_URL, "/api/measure");
+		service.getAuth().setResponseStatusField("code");
+		TokenFetcher tokenFetcher = mock(TokenFetcher.class);
+		LogCaptures logs = LogCaptures.attach(FeignAuthStatusHandler.class);
+		try {
+			// 正文读了一半连接就断了：这些字节已经在流上消费掉，不回灌就永远丢了
+			Response response = response(500, BASE_URL + "/api/measure/read/1",
+					bodyStream("{\"code\":421,\"message\":\"boom\"}", 10));
+
+			Exception exception = handler("measure", service, tokenFetcher).handle("MeasureClient#get", response);
+
+			assertThat(exception).isInstanceOf(FeignAuthTokenException.class);
+			assertThat(((FeignException) exception.getCause()).contentUTF8()).isEqualTo("{\"code\":42");
+			assertThat(logs.contains(Level.WARN, "Failed to read response body")).isTrue();
+			// 截断的正文不足以判定令牌过期，不能据此清缓存重放
+			verifyNoInteractions(tokenFetcher);
+		}
+		finally {
+			logs.detach();
+		}
+	}
+
+	@Test
+	void readFailureAfterTheWholePayloadKeepsItForTheCauseWithoutRetrying() {
+		FeignAuthProperties.Service service = oauth2Service("measure", BASE_URL, "/api/measure");
+		service.getAuth().setResponseStatusField("code");
+		TokenFetcher tokenFetcher = mock(TokenFetcher.class);
+		Response response = response(500, BASE_URL + "/api/measure/read/1", bodyStream("{\"code\":421}", 12));
+
+		Exception exception = handler("measure", service, tokenFetcher).handle("MeasureClient#get", response);
+
+		// 只有完整读完的正文才参与过期判定：读取既然失败了，这条响应就按普通远程错误处理
+		assertThat(exception).isInstanceOf(FeignAuthTokenException.class);
+		assertThat(exception instanceof RetryableException).isFalse();
+		assertThat(((FeignException) exception.getCause()).contentUTF8()).isEqualTo("{\"code\":421}");
+		verifyNoInteractions(tokenFetcher);
+	}
+
+	@Test
+	void fullyReadBodyStillDrivesExpiredTokenDetection() {
+		FeignAuthProperties.Service service = oauth2Service("measure", BASE_URL, "/api/measure");
+		service.getAuth().setResponseStatusField("code");
+		TokenFetcher tokenFetcher = mock(TokenFetcher.class);
+		when(tokenFetcher.invalidateToken(anyString(), anyString())).thenReturn(true);
+		Response response = response(200, BASE_URL + "/api/measure/read/1", bodyStream("{\"code\":421}", -1));
+
+		Exception exception = handler("measure", service, tokenFetcher).handle("MeasureClient#get", response);
+
+		assertThat(exception).isInstanceOf(RetryableException.class);
+		verify(tokenFetcher).invalidateToken("measure", "/api/measure/read/1");
+	}
+
 	// ── 装配与辅助 ────────────────────────────────────────────────────────
 
 	private static FeignAuthStatusHandler handlerWith(String name, FeignAuthProperties.Service service) {
@@ -190,6 +250,40 @@ class FeignAuthStatusMessageTest {
 				.request(request)
 				.headers(Collections.<String, Collection<String>>emptyMap())
 				.build();
+	}
+
+	private static Response response(int status, String url, InputStream body) {
+		Request request = Request.create(Request.HttpMethod.GET, url,
+				Collections.<String, Collection<String>>emptyMap(),
+				null, StandardCharsets.UTF_8, new RequestTemplate());
+		return Response.builder()
+				.status(status)
+				.reason("test")
+				.request(request)
+				.headers(Collections.<String, Collection<String>>emptyMap())
+				.body(body, null)
+				.build();
+	}
+
+	// failAt 为负数表示正常读完；否则交付 failAt 个字节后即抛 IOException，模拟连接中途断开
+	private static InputStream bodyStream(String content, final int failAt) {
+		final byte[] bytes = content.getBytes(StandardCharsets.UTF_8);
+		return new InputStream() {
+
+			private int index;
+
+			@Override
+			public int read() throws IOException {
+				if (failAt >= 0 && this.index == failAt) {
+					throw new IOException("connection reset while reading the response body");
+				}
+				if (this.index >= bytes.length) {
+					return -1;
+				}
+				return bytes[this.index++] & 0xff;
+			}
+
+		};
 	}
 
 }

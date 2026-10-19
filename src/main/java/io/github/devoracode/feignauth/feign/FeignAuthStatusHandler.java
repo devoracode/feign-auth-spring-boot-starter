@@ -6,7 +6,6 @@ import feign.FeignException;
 import feign.Request;
 import feign.Response;
 import feign.RetryableException;
-import feign.Util;
 import io.github.devoracode.feignauth.autoconfigure.FeignAuthProperties;
 import io.github.devoracode.feignauth.exception.FeignAuthTokenException;
 import io.github.devoracode.feignauth.oauth2.TokenFetcher;
@@ -17,7 +16,9 @@ import org.apache.commons.logging.LogFactory;
 import org.springframework.util.Assert;
 import org.apache.commons.lang3.StringUtils;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
 
@@ -75,16 +76,29 @@ final class FeignAuthStatusHandler {
 		// 检查是否需要读取响应体
 		byte[] bodyBytes = null;
 		if (needResponseBodyCheck(resolved, authType, status) && response.body() != null) {
+			ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+			boolean bodyFullyRead = false;
 			try {
-				bodyBytes = Util.toByteArray(response.body().asInputStream());
-				// 创建响应体已恢复的新 Response，供后续使用
-				response = response.toBuilder()
-						.body(bodyBytes)
-						.build();
-			} catch (IOException e) {
+				InputStream in = response.body().asInputStream();
+				byte[] chunk = new byte[8192];
+				int read;
+				while ((read = in.read(chunk)) != -1) {
+					buffer.write(chunk, 0, read);
+				}
+				bodyFullyRead = true;
+			}
+			catch (IOException e) {
 				if (logger.isWarnEnabled()) {
 					logger.warn("Failed to read response body for expired token check", e);
 				}
+			}
+			// 流一旦被读就消费掉了，必须把读到的字节（异常时只有一半）回灌：
+			// 不回灌的话后续 FeignException.errorStatus 只会拿到所剩无几甚至为空的正文
+			byte[] readBytes = buffer.toByteArray();
+			response = response.toBuilder().body(readBytes).build();
+			// 令牌过期判定仍只用完整读到的正文：截断内容本就不该据此清缓存重放
+			if (bodyFullyRead) {
+				bodyBytes = readBytes;
 			}
 		}
 
