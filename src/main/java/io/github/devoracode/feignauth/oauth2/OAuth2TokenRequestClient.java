@@ -28,7 +28,6 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
@@ -103,17 +102,14 @@ public class OAuth2TokenRequestClient implements AutoCloseable {
 			throw new FeignAuthConfigurationException(
 					"OAuth2 client id and secret are required for service baseUrl=" + service.getBaseUrl());
 		}
-		Map<String, String> parameters = buildTokenRequestParameters(auth, client);
+		Map<String, String> parameters = TokenRequestParameters.build(auth, client);
 		String method = auth.getMethod() == null ? "post" : auth.getMethod().trim().toLowerCase(Locale.ROOT);
 		boolean credentialsInParameters = credentialsInParameters(auth, method);
 		if (credentialsInParameters && "get".equals(method)) {
 			warnCredentialsInQuery(serviceName);
 		}
 		if (!credentialsInParameters) {
-			// RFC 6749 §2.3.1：一个请求只能使用一种客户端认证方式，走 Basic 时参数里不能再留凭证。
-			// 字段名与 buildTokenRequestParameters 同源，request-fields 改名后依然生效
-			parameters.remove(StringUtils.defaultString(auth.getRequestFields().getClientId(), "client_id"));
-			parameters.remove(StringUtils.defaultString(auth.getRequestFields().getClientSecret(), "client_secret"));
+			TokenRequestParameters.removeClientCredentials(auth, parameters);
 		}
 		if ("get".equals(method)) {
 			return requestTokenByGet(serviceName, service, auth, client, parameters, credentialsInParameters);
@@ -342,25 +338,6 @@ public class OAuth2TokenRequestClient implements AutoCloseable {
 			return Integer.MAX_VALUE;
 		}
 		return (int) timeout.toMillis();
-	}
-
-	private static Map<String, String> buildTokenRequestParameters(FeignAuthProperties.Auth auth,
-			FeignAuthProperties.Client client) {
-		FeignAuthProperties.RequestFields fields = auth.getRequestFields();
-		String clientIdField = StringUtils.defaultString(fields.getClientId(), "client_id");
-		String clientSecretField = StringUtils.defaultString(fields.getClientSecret(), "client_secret");
-
-		Map<String, String> parameters = new HashMap<>();
-		parameters.put(clientIdField, client.getId());
-		parameters.put(clientSecretField, client.getSecret());
-
-		if (StringUtils.isBlank(fields.getClientId()) && StringUtils.isBlank(fields.getClientSecret())) {
-			parameters.put("grant_type", StringUtils.defaultString(client.getGrantType(), "client_credentials"));
-		}
-		else if (StringUtils.isNotBlank(fields.getGrantType()) && StringUtils.isNotBlank(client.getGrantType())) {
-			parameters.put(fields.getGrantType(), client.getGrantType());
-		}
-		return parameters;
 	}
 
 }
