@@ -7,7 +7,7 @@ Spring Boot Starter，为 OpenFeign 提供多服务鉴权自动注入与自定�
 - Java 8+（starter 以 `source/target 1.8` 编译）
 - Spring Boot 2.2.x ~ 2.7.x：基线为 2.2.5（依赖管理与测试均以此为准），自动配置同时注册 `spring.factories`（≤2.6）与 `AutoConfiguration.imports`（2.7+），故 2.7 下同样可加载
 - 使用方自行引入 OpenFeign（`spring-cloud-starter-openfeign`，对应 feign-core 10.x）：starter 对 `feign-core` 的依赖是 `optional`，不会传递进来
-- 令牌请求所需的 Apache HttpClient 与 `provider: redis` 所需的 Spring Data Redis 目前由 starter 传递引入，无需单独声明
+- 令牌请求所需的 Apache HttpClient 由 starter 传递引入，无需单独声明；`provider: redis` 所需的 Spring Data Redis **不再传递引入**（对 `spring-boot-starter-data-redis` 的依赖是 `optional`），要用 Redis 缓存/锁需自行声明该 starter
 
 ## 安装
 
@@ -530,7 +530,7 @@ feign-auth:
 **Redis 缓存特点**：
 - 利用 Redis TTL 自动过期机制
 - 多实例共享 Token，避免重复获取
-- Spring Data Redis 已随 starter 传递引入，无需单独声明依赖；使用方只需配置 Redis 连接（`spring.redis.*` 等）使容器中存在 `RedisConnectionFactory`
+- 使用 `provider: redis` 需自行声明 `org.springframework.boot:spring-boot-starter-data-redis`（starter 对它的依赖是 `optional`，不会传递进来），再配置 Redis 连接（`spring.redis.*` 等）使容器中存在 `RedisConnectionFactory`；只用 `provider: local` 时无需任何 Redis 依赖，classpath 上也不会出现 Spring Data Redis
 - 容器内**没有** `RedisConnectionFactory` 时（依赖被排除、`RedisAutoConfiguration` 被 exclude 等），启动即抛 `FeignAuthConfigurationException` 并在信息里点名 `feign-auth.cache.provider=redis` 与两种修法（补 Redis 配置或改回 `local`），不再是一句看不出根因的 `NoSuchBeanDefinitionException: TokenStore`。若使用方同时自备 `TokenStore` 与 `LockProvider`，Redis 连接是否存在都不受影响；只自备其一时，另一侧仍按上述规则快速失败。使用方自备 `TokenFetcher` 时本节的两条校验都不参与——此时 starter 的缓存装配整体让位，容器里没有任何组件消费 `TokenStore` / `LockProvider`
 - 存储格式：键为纯 String（见上方 Key 格式表），值为**固定类型的 JSON**（只含 `accessToken` / `ttl` / `expireAt` 三个字段，不带任何类型元数据），由 starter 自建的 `RedisTemplate`（`StringRedisSerializer` 键 + 令牌专用 JSON 序列化器值）读写，不借用容器中已有的 `RedisTemplate` / `StringRedisTemplate` 及其序列化器，因此使用方或其他组件的序列化配置不会破坏令牌读写
 - 令牌条目不写 `@class` 之类的类型信息，读取时也**不以值里的类名决定实例化哪个类**：即使 Redis 被第三方写入（共享实例、弱口令、与其他业务共库等），恶意载荷也只会被拒绝并清理，不会被实例化；早期版本写入的带 `@class` 条目仍可正常读出，无需清缓存
