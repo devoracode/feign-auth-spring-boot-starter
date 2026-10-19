@@ -385,7 +385,8 @@ class OAuth2TokenRequestClientTest {
 
 	@Test
 	void parametersModePutsCredentialsBackIntoTheQueryAndWarnsOnce() {
-		LogCaptures logs = LogCaptures.attach(OAuth2TokenRequestClient.class);
+		// 这条 WARN 由 TokenEndpointWarnings 发出，logger 名跟着协作类走
+		LogCaptures logs = LogCaptures.attach(TokenEndpointWarnings.class);
 		try {
 			AtomicReference<RecordedRequest> recorded = recordTokenRequests();
 
@@ -503,7 +504,8 @@ class OAuth2TokenRequestClientTest {
 
 	@Test
 	void insecureTokenUrlWarnsOncePerServiceAndStaysQuietOnLoopback() {
-		LogCaptures logs = LogCaptures.attach(OAuth2TokenRequestClient.class);
+		// 去重键与这条 WARN 都在 TokenEndpointWarnings 里，按客户端实例隔离
+		LogCaptures logs = LogCaptures.attach(TokenEndpointWarnings.class);
 		try {
 			OAuth2TokenRequestClient client = createClient(shortTimeoutHttp());
 			// 192.0.2.0/24 是保留的文档网段，不会真的连出去
