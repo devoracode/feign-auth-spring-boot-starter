@@ -31,6 +31,7 @@ public class ServiceMatcher {
 	private final FeignAuthProperties properties;
 
 	// URL 串到派生值是纯函数映射（同一个字符串永远得到同一个结果），因此缓存不会因配置变更而失效
+	// 记忆化与 MAX_URL_CACHE_ENTRIES 上限都没有对外契约可观察，ServiceMatcherTest 反射读取这两个字段来钉住
 	private final ConcurrentMap<String, String> authorityCache = new ConcurrentHashMap<>();
 
 	private final ConcurrentMap<String, String> basePathCache = new ConcurrentHashMap<>();

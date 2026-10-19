@@ -204,6 +204,8 @@ class ServiceMatcherTest {
 		assertThat(authorityCache).hasSize(EXPECTED_URL_CACHE_CAP);
 	}
 
+	// 记忆化与缓存上限都无对外契约（重解析与走缓存结果相同），只能反射读内部 map 钉住；
+	// 字段改名时这里当场抛 NoSuchFieldException，不会静默漏
 	private static ConcurrentMap<?, ?> cache(ServiceMatcher matcher, String fieldName) throws Exception {
 		Field field = ServiceMatcher.class.getDeclaredField(fieldName);
 		field.setAccessible(true);
