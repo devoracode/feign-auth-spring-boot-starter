@@ -117,34 +117,30 @@ final class FeignAuthStatusHandler {
 	}
 
 	private boolean needResponseBodyCheck(ResolvedService resolved, AuthType authType, int status) {
-		if (resolved == null || resolved.getService() == null || resolved.getService().getAuth() == null) {
+		FeignAuthProperties.Auth auth = authOf(resolved);
+		if (auth == null) {
 			return false;
 		}
-		FeignAuthProperties.Auth auth = resolved.getService().getAuth();
 		// 仅在以下条件同时满足时才检查响应体：
 		// 1. HTTP 状态码本身不是 token 过期状态
 		// 2. 该服务为 OAuth2 服务
 		// 3. 已显式配置 responseStatusField
-		return !isExpiredTokenStatus(resolved, status) && authType == AuthType.OAUTH2
+		return !isExpiredTokenStatus(auth, status) && authType == AuthType.OAUTH2
 				&& StringUtils.isNotBlank(auth.getResponseStatusField());
 	}
 
 	private Integer detectExpiredTokenStatus(ResolvedService resolved, int status, byte[] bodyBytes) {
+		FeignAuthProperties.Auth auth = authOf(resolved);
 		// 首先检查 HTTP 状态码
-		if (isExpiredTokenStatus(resolved, status)) {
+		if (isExpiredTokenStatus(auth, status)) {
 			return status;
 		}
 
 		// 若响应体可用，再检查响应体中的状态
-		if (bodyBytes == null || bodyBytes.length == 0) {
+		if (bodyBytes == null || bodyBytes.length == 0 || auth == null) {
 			return null;
 		}
 
-		if (resolved == null || resolved.getService() == null || resolved.getService().getAuth() == null) {
-			return null;
-		}
-
-		FeignAuthProperties.Auth auth = resolved.getService().getAuth();
 		String responseStatusField = auth.getResponseStatusField();
 		if (StringUtils.isBlank(responseStatusField)) {
 			return null;
@@ -251,18 +247,22 @@ final class FeignAuthStatusHandler {
 		}
 	}
 
-	private static boolean isExpiredTokenStatus(ResolvedService resolved, int status) {
-		if (resolved == null || resolved.getService() == null || resolved.getService().getAuth() == null) {
-			return false;
+	private static boolean isExpiredTokenStatus(FeignAuthProperties.Auth auth, int status) {
+		return auth != null && auth.isExpiredTokenStatus(status);
+	}
+
+	// resolved → service → auth 三段判空原本在四个调用点各写一遍，收敛到这里。
+	// 任一段缺失都按「该服务没有可读的 auth 配置」处理，返回 null 后由各调用方决定后果
+	private static FeignAuthProperties.Auth authOf(ResolvedService resolved) {
+		if (resolved == null || resolved.getService() == null) {
+			return null;
 		}
-		return resolved.getService().getAuth().isExpiredTokenStatus(status);
+		return resolved.getService().getAuth();
 	}
 
 	private static AuthType authTypeOf(ResolvedService resolved) {
-		if (resolved == null || resolved.getService() == null || resolved.getService().getAuth() == null) {
-			return null;
-		}
-		return AuthType.from(resolved.getService().getAuth().getType());
+		FeignAuthProperties.Auth auth = authOf(resolved);
+		return (auth == null) ? null : AuthType.from(auth.getType());
 	}
 
 	static final class ResolvedRequest {
