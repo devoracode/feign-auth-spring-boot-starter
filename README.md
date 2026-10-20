@@ -2,6 +2,8 @@
 
 Spring Boot Starter，为 OpenFeign 提供多服务鉴权自动注入与自定义 Header 扩展。将不同第三方 API 的 Token 获取、缓存、注入逻辑集中到配置文件中，业务 FeignClient 统一使用 `FeignClientConfig` 即可；如需注入动态计算的自定义 Header，实现 `HeaderCustomizer` 接口并注册为 Spring Bean 即可。
 
+> 本页是概览与速查。逐项配置说明（每个配置项的类型、默认值与含义）、24 个使用场景、扩展点示例、报错速查与 1.x → 2.0.0 升级对照，见 **[使用指南 USAGE.md](USAGE.md)**。
+
 ## 环境要求
 
 - Java 8+（starter 以 `source/target 1.8` 编译）
