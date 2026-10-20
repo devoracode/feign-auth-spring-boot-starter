@@ -9,24 +9,45 @@
 
 ## 目录
 
+第一次接入只需要读完「入门」这 5 节；后面按用途分组，需要时再查。
+
+### 入门
+
 1. [它解决什么问题](#1-它解决什么问题)
 2. [环境要求](#2-环境要求)
 3. [安装](#3-安装)
-4. [最小可用示例](#4-最小可用示例)
-5. [工作原理](#5-工作原理)
+4. [从零到第一次跑通](#4-从零到第一次跑通)
+5. [新手常见踩坑](#5-新手常见踩坑)
+
+### 参考
+
 6. [配置项全量参考](#6-配置项全量参考)
 7. [认证方式详解](#7-认证方式详解)
 8. [服务与 Client 的匹配规则](#8-服务与-client-的匹配规则)
-9. [Header 注入](#9-header-注入)
+9. [Header 注入](#9-header-注入)（整节可选）
+
+### 缓存与容错
+
 10. [令牌缓存与并发控制](#10-令牌缓存与并发控制)
 11. [过期令牌识别与自动重放](#11-过期令牌识别与自动重放)
+
+### 排障
+
 12. [异常与排障](#12-异常与排障)
 13. [日志与可观测性](#13-日志与可观测性)
+
+### 扩展与落地
+
 14. [扩展点](#14-扩展点)
 15. [场景合集](#15-场景合集)
 16. [生产检查清单](#16-生产检查清单)
+
+### 升级与边界
+
 17. [升级到 2.0.0](#17-升级到-200)
 18. [已知边界](#18-已知边界)
+
+> 文末另有两张速查表：[附：默认值速查](#附默认值速查)、[附：术语表](#附术语表)。
 
 ---
 
@@ -73,7 +94,7 @@
 </dependency>
 ```
 
-使用 OAuth2 时还需要 OpenFeign 本身（版本由你的 Spring Cloud BOM 管理）：
+使用 OAuth2 时还需要 OpenFeign 本身（版本由你的 Spring Cloud BOM 管理；Boot 与 Spring Cloud 的具体对应见 4.2）：
 
 ```xml
 <dependency>
@@ -119,11 +140,68 @@ implementation 'org.springframework.boot:spring-boot-starter-data-redis'
 
 ---
 
-## 4. 最小可用示例
+## 4. 从零到第一次跑通
 
-### 4.1 配置
+> 这一节是给「刚接手这个 starter、之前没单独配过 OpenFeign」的同学写的完整路径：确认手里有什么 → 加依赖 → 配置放哪 → 挂启动类 → 写客户端 → 发第一个请求 → 对着日志判断成败。只想查某个配置项的含义，直接跳到第 6 节。
+
+### 4.1 先确认你手里有什么
+
+开工前向接口提供方（或对方接口文档）确认这 6 项，缺任何一项都会卡在某一步：
+
+| 要确认的东西 | 写在哪个配置 | 不知道会怎样 |
+|---|---|---|
+| 令牌端点 URL，例如 `https://api.example.com/oauth/token` | `auth.token-url` | 请求期 `token-url is required for OAuth2 service baseUrl=...` |
+| `client_id` / `client_secret` | `auth.clients[].id` / `secret` | IdP 返回 `error=invalid_client` |
+| 取号用 POST 还是 GET；凭证放请求体、查询串还是 Basic 头 | `auth.method` + `auth.client-authentication` | IdP 返回 400/401，报文格式对不上 |
+| 令牌要放哪个 Header、要不要 `Bearer ` 前缀 | `auth.token-header` + `auth.token-prefix` | 令牌取到了，但对端仍回 401 |
+| 业务 API 的协议、域名、端口、路径前缀 | `services.<name>.base-url` | `no service config matched`（4.8） |
+| 你工程用的 Spring Boot 版本 | 决定 Spring Cloud 版本（4.2） | 依赖冲突，启动阶段就失败 |
+
+同时确认工程本身：JDK 8+、Spring Boot 2.2.x~2.7.x、已引入 OpenFeign。这三项任一不满足，先解决它再往下。
+
+### 4.2 加依赖
+
+`pom.xml` 里加两段：
+
+```xml
+<dependency>
+    <groupId>io.github.devoracode</groupId>
+    <artifactId>feign-auth-spring-boot-starter</artifactId>
+    <version>2.0.0</version>
+</dependency>
+
+<dependency>
+    <groupId>org.springframework.cloud</groupId>
+    <artifactId>spring-cloud-starter-openfeign</artifactId>
+</dependency>
+```
+
+第二个依赖不写 `<version>` 的前提是工程已经 import 了 Spring Cloud BOM；没 import 就按下面这张对照表填一个具体版本（表的来源见 [Spring Cloud](https://spring.io/projects/spring-cloud/) 官方版本说明）：
+
+| Spring Boot | Spring Cloud release train | spring-cloud-starter-openfeign |
+|---|---|---|
+| 2.2.x、2.3.x | `Hoxton` | 2.2.x |
+| 2.4.x、2.5.x | `2020.0.x` | 3.0.x |
+| 2.6.x、2.7.x | `2021.0.x` | 3.1.x |
+
+> 本 starter 在 Spring Boot 2.2.5 + feign-core 10.7.4 上开发与验证。用表中更高版本时，先确认你自己的 Feign 接口能正常调通，再接本 starter。
+
+确认依赖真的进来了：
+
+```bash
+mvn dependency:tree -Dincludes=io.github.devoracode
+```
+
+应输出 `io.github.devoracode:feign-auth-spring-boot-starter:jar:2.0.0`，并带出 `org.apache.httpcomponents:httpclient`（取号用的，不需要你声明）。
+
+### 4.3 配置写在哪个文件
+
+写到 `src/main/resources/application.yml`。`feign-auth` 是**根键**，必须顶格（第 0 列）——它和 `spring:`、`server:` 是同一层，不是它们的子项：
 
 ```yaml
+server:
+  port: 8080
+
 feign-auth:
   services:
     order:
@@ -136,11 +214,47 @@ feign-auth:
             secret: my-secret
 ```
 
-- `order` 是**逻辑服务名**：用于配置引用、缓存键、`HeaderCustomizer#supports`，与 `@FeignClient(name = ...)` **没有强制绑定关系**。匹配只看 URL 与路径（见第 8 节）。
-- `base-url` 必须与 Feign 实际 target 的 `scheme://host:port` 一致（默认端口会归一化）。
-- `clients` 至少一个；没有 `path-prefixes` 的那个是默认 Client。
+- `order` 是你**自己起的逻辑服务名**，用于配置引用、缓存键、`HeaderCustomizer#supports`，与 `@FeignClient(name = ...)` 没有强制绑定关系。匹配只看 URL 与路径（见第 8 节）。
+- `base-url` 必须与 Feign 实际 target 的 `scheme://host:port` 一致（默认端口 80/443 会归一化）。
+- `clients` 必须是**用 `-` 开头的列表**，至少一个；没有 `path-prefixes` 的那个就是默认 Client。
 
-### 4.2 FeignClient
+第一次接入只需要上面这几行，其余配置项都有默认值：
+
+| 不配的项 | 默认值 |
+|---|---|
+| `auth.type` | 无默认，**必须写** `oauth2` |
+| `auth.method` | `post`（请求体用 JSON 编码） |
+| `auth.client-authentication` | `auto` |
+| `auth.token-header` | `x-token` |
+| `auth.token-prefix` | 空（不拼前缀） |
+| `auth.expire-ahead-seconds` | `60` |
+| `cache.provider` | `local`（不需要 Redis 依赖） |
+| `feign-auth.http.*` 超时 | 连接 5s / 从连接池取连接 5s / 读取 10s |
+| `feign-auth.fail-on-no-match` | `true` |
+
+> 密钥不要提交进代码库：写成 `secret: ${ORDER_SECRET}`，从环境变量注入（第 16 节检查清单）。
+
+### 4.4 启动类：别忘了 `@EnableFeignClients`
+
+```java
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.cloud.openfeign.EnableFeignClients;
+
+@SpringBootApplication
+@EnableFeignClients
+public class MyApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(MyApplication.class, args);
+    }
+}
+```
+
+- `@EnableFeignClients` 默认只扫描启动类所在包及其子包；`@FeignClient` 接口在别的包时写成 `@EnableFeignClients(basePackages = "com.acme.feign")`。
+- **漏掉这个注解的后果**：注入 `OrderFeignClient` 时启动报 `NoSuchBeanDefinitionException`。这条报错与 starter 无关，改法是补注解，不是去翻配置。
+
+### 4.5 定义 FeignClient 并挂上 starter
 
 ```java
 import io.github.devoracode.feignauth.feign.FeignClientConfig;
@@ -160,7 +274,12 @@ public interface OrderFeignClient {
 }
 ```
 
-### 4.3 调用
+- `FeignClientConfig` 是 **starter 提供的类**，不需要你自己写或复制一份。它给这个客户端注册请求拦截器、错误解码器和重试器三样东西。
+- `configuration = FeignClientConfig.class` **不能漏**。漏了以后请求照样发出去，但不带认证 Header、也不会做过期重放，典型现象是对端一直回 401，而日志里一条 `FeignAuth` 都没有。
+- `url = "${...}"` 是引用 4.3 里配的同一个值，避免域名写两处对不上；直接写死 `url = "https://api.example.com"` 也可以，但必须和 `base-url` 完全一致。
+- 占位符里的键名拼错时**不会**编译报错，也不会在启动时报「占位符解析失败」：`@FeignClient` 注册发生在占位符解析器装上之前，`${...}` 会原样留在 target 上，第一次调用才以 `no service config matched for baseUrl=http://${...}` 的形式暴露——报错里能直接看到那串没解析的字面量。所以 `url` 一定要和 `base-url` 用同一个键，别两处手写。
+
+### 4.6 业务代码调用
 
 ```java
 @Service
@@ -179,48 +298,178 @@ public class OrderService {
 }
 ```
 
-首次请求时 starter 会向 `token-url` 取号，之后命中缓存；Header 默认是 `x-token: <token>`（可用 `token-header` 改）。取号成功日志（INFO）：
+### 4.7 第一次请求：日志应该长这样
+
+先把 starter 的日志开到 DEBUG（`application.yml` 追加，与 `feign-auth` 顶格同级）：
+
+```yaml
+logging:
+  level:
+    io.github.devoracode.feignauth: DEBUG
+```
+
+启动阶段 starter 本身不打日志；6.9 里那些非法配置会直接抛异常终止启动，不会走到这一步。第一次调用 `orderFeignClient.getOrder("1")` 时，你会看到这两行：
 
 ```text
-FeignAuth [oauth2] fetching new token for service='order', clientId='my-client'
+INFO  io.github.devoracode.feignauth.oauth2.TokenFetcher : FeignAuth [oauth2] fetching new token for service='order', clientId='my-client'
+DEBUG io.github.devoracode.feignauth.feign.FeignAuthRequestInterceptor : FeignAuth [oauth2] service='order' header='x-token' path=/api/orders/1
 ```
+
+第一行说明 starter 向 `token-url` 发过取号请求并且成功，第二行说明令牌已按 `x-token` 注进这个请求。第二次及以后的调用只剩 DEBUG 那行——令牌命中缓存，不再取号。
+
+**判断跑通的三条标准**：
+
+1. 日志里出现过 `fetching new token`；
+2. 没有任何 `FeignAuth` 开头的 WARN / ERROR；
+3. 对端返回 2xx，业务方法拿到正常返回值。
+
+三条都满足就算接好了；想核对发出去的 Header **值**，starter 日志不会打印令牌内容（第 13 节），需要本机抓包或让对端回显。三条里有不满足的，按下一节的原文对照定位。
+
+### 4.8 三种最常见的失败（原文对照）
+
+**A. 一条 `FeignAuth` 日志都没有，请求直接 401**
+
+不是 starter 报错，而是这个客户端没挂上 `FeignClientConfig`——回到 4.5 补 `configuration`。
+
+**B. 匹配不到服务配置**
+
+```text
+io.github.devoracode.feignauth.exception.FeignAuthConfigurationException:
+FeignAuth: no service config matched for baseUrl=https://api.example.com, path=/api/orders/1;
+configured services: [order -> https://open.example.com]; the Feign target URL must point to the
+same scheme/host/port as feign-auth.services.<name>.base-url (default ports 80/443 are normalized,
+a base-url path is treated as an outer prefix for path matching); set
+feign-auth.fail-on-no-match=false to send unmatched requests without auth headers
+```
+
+看 `configured services` 里列出的就是你配的 `base-url`，把它和前半句的 `baseUrl=` 逐字符比：协议（http/https）、端口、拼写。若显示 `<none configured>`，说明根键没写对（多半还写着 1.x 的 `feign:`）。
+
+**C. 取号本身失败**
+
+```text
+ERROR io.github.devoracode.feignauth.feign.FeignAuthRequestInterceptor :
+FeignAuth [oauth2] failed to obtain token for service='order', path=/api/orders/1:
+Token request failed: 401, error=invalid_client
+```
+
+冒号后面是 IdP 的原话。`invalid_client` 是凭证不对或认证方式不匹配；换成 `Connection refused` / `Read timed out` 这类，则是网络或超时问题，跟配置写法无关。完整实例见 12.4。
+
+### 4.9 先绕开 starter，验证凭证本身能不能拿到
+
+怀疑配置对不对之前，先用 curl 手工取一次号，把「凭证/端点问题」和「starter 写法问题」分开。默认写法（`method: post`，请求体是 JSON）对应：
+
+```bash
+curl -s -X POST "https://api.example.com/oauth/token" \
+  -H "Content-Type: application/json" \
+  -d '{"grant_type":"client_credentials","client_id":"my-client","client_secret":"my-secret"}'
+```
+
+对方要求表单编码时（配了 `token-request-headers.Content-Type: application/x-www-form-urlencoded`）：
+
+```bash
+curl -s -X POST "https://api.example.com/oauth/token" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  --data-urlencode "grant_type=client_credentials" \
+  --data-urlencode "client_id=my-client" \
+  --data-urlencode "client_secret=my-secret"
+```
+
+对方要求 Basic（配了 `client-authentication: basic`）：
+
+```bash
+curl -s -X POST "https://api.example.com/oauth/token" \
+  -u "my-client:my-secret" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "grant_type=client_credentials"
+```
+
+响应里出现 `access_token` 就说明凭证、端点、认证方式都对，问题一定出在 YAML 写法上；出现 `error=invalid_client` 就先去核对凭证，别改 starter 配置。
 
 ---
 
-## 5. 工作原理
+## 5. 新手常见踩坑
 
-### 5.1 业务请求链路
+照抄第 4 节之后仍然跑不通，多半落在下面 12 条里。每条给「现象 → 原因 → 改法」；现象里的报错文字与代码实际抛出的消息模板一致，可以直接复制去搜索（个别来自 YAML/Spring 绑定层，已在条目里说明）。
 
-```text
-业务方法调用
-   │
-   ▼
-FeignAuthRequestInterceptor.apply(template)     ← FeignClientConfig 注册
-   │  1. 从 Feign target 拆出 baseUrl(scheme://host:port) 与 target 路径前缀
-   │  2. 与 template.path() 拼成归一化请求路径
-   │  3. ServiceMatcher 匹配 feign-auth.services.*
-   │  4. OAuth2 → TokenFetcher.getToken()（缓存优先）
-   │     API Key → 直接取配置值
-   │  5. 注入认证 Header
-   │  6. HeaderManager 写 request-headers + 执行 HeaderCustomizer
-   ▼
-真正发出 HTTP 请求
-   │
-   ├── 2xx：正常返回
-   │
-   └── 非 2xx：FeignAuthErrorDecoder
-         │  1. 判断是否「令牌过期」（HTTP 码 或 response-status-field）
-         │  2. 是 → 驱逐缓存 → 抛 RetryableException → Feign Retryer 重放一次
-         │  3. 否 → 抛 FeignAuthTokenException（带远程说明文案）
-         ▼
+### 5.1 YAML 用了 Tab 缩进
+
+- **现象**：工程启动即失败，报 `found character '\t(TAB) that cannot start any token`。
+- **原因**：YAML 规范不允许 Tab 作为缩进字符。
+- **改法**：全选缩进处，换成空格，一层两个空格。IDEA 里 `Convert Indents to Spaces`。
+
+### 5.2 根键还写着 1.x 的 `feign:`
+
+- **现象**：启动一切正常，第一次调用抛 `... no service config matched for baseUrl=..., path=...`，报错里 `configured services: <none configured>`。
+- **原因**：2.0.0 的配置根键是 `feign-auth`，`feign.services.*` 不再绑定，配置读不到但不报错。
+- **改法**：根键改成 `feign-auth:`。完整升级对照见第 17 节。
+
+### 5.3 `token-prefix` 忘了加引号
+
+- **现象**：令牌正常取到（日志有 `fetching new token`），对端仍回 401；实际 Header 是 `BearereyJhbGc...`。
+- **原因**：`token-prefix: Bearer ` 不带引号时，YAML 会去掉末尾空格，前缀变成 `Bearer`，starter 只做原样字符串拼接。
+- **改法**：`token-prefix: "Bearer "`（保留空格必须加引号）。
+
+### 5.4 `clients` 写成了 Map
+
+- **现象**：启动阶段绑定失败，报错点名 `feign-auth.services.order.auth.clients`。
+- **原因**：`clients` 是列表，写成 `clients:` 下直接 `id: ...`（或 `{id: ..., secret: ...}`）无法转成 `List`。
+- **改法**：每个 Client 用短横线开头：
+
+```yaml
+clients:
+  - id: my-client
+    secret: my-secret
 ```
 
-### 5.2 关键设计点
+### 5.5 配了两个默认 Client
 
-- **鉴权发生在 `RequestInterceptor` 阶段**：请求还没发出，配置错误会立刻失败，不会把未鉴权请求打到远端。
-- **错误处理发生在 `ErrorDecoder` 阶段**：只有非 2xx 响应才会进入过期令牌判定。
-- **匹配依据是 URL，不是 `@FeignClient(name)`**：同一个逻辑服务可以被多个 FeignClient 共用；多个服务也可以挂在同一个 host 的不同路径前缀上。
-- **令牌按 `{服务名}:{clientId}` 隔离**：同一服务下不同 Client 各自缓存、各自驱逐。
+- **现象**：请求期抛 `Multiple default OAuth2 clients configured for service: order`。
+- **原因**：没有 `path-prefixes` 的 Client 就是默认 Client，一个服务只能有一个。
+- **改法**：给需要按路径路由的那个补 `path-prefixes`，只留一个不带前缀的。
+
+### 5.6 `base-url` 多带了路径
+
+- **现象**：`no service config matched`，报错里 `baseUrl=https://api.example.com`（没有 `/v1`）而 `configured services: [order -> https://api.example.com/v1]`。
+- **原因**：匹配用 `scheme://host:port` 比 authority，`base-url` 上的路径会被当作「外层前缀」并入路径匹配；`@FeignClient(url=...)` 通常只写到 host，两边就对不齐了。
+- **改法**：确认对端接口路径确实带这层前缀，并把 `@FeignClient(url)` 写成同一个值（推荐用 `${feign-auth.services.order.base-url}` 引用）；否则把 `base-url` 改成只到 host。详见 8.2。
+
+### 5.7 `token-url` 漏写协议
+
+- **现象**：`Invalid token-url: api.example.com/oauth/token`。
+- **原因**：URI 解析失败，缺 `https://`。
+- **改法**：补协议。生产环境建议 HTTPS，明文 `http://`（非回环地址）时 starter 会按服务记一次 WARN。
+
+### 5.8 `auth.type` 拼错
+
+- **现象**：`FeignAuth: service(s) matched baseUrl=... but have invalid auth config: order (unsupported auth.type 'oauth')`。
+- **原因**：只接受 `oauth2` 和 `api-key`（忽略大小写），`oauth`、`apikey` 都算配置错误。
+- **改法**：改成合法取值。这一条不受 `fail-on-no-match=false` 影响：只要 authority 匹配上了，非法的 `auth` 一定抛异常，只能改配置。
+
+### 5.9 把 OAuth2 的路由配在 `auth.path-prefixes`
+
+- **现象**：不同路径想用不同 Client，结果全部命中默认 Client。
+- **原因**：`auth.path-prefixes` 只对 `api-key` 生效。
+- **改法**：OAuth2 的前缀路由配在 `auth.clients[].path-prefixes` 上。
+
+### 5.10 忘挂 `configuration = FeignClientConfig.class`
+
+- **现象**：对端一直 401，且日志里一条 `FeignAuth` 都没有。
+- **原因**：拦截器、错误解码器、重试器都由这个配置类注册，没挂就等于完全没接 starter。
+- **改法**：`@FeignClient(..., configuration = FeignClientConfig.class)`。每个要用鉴权的客户端都要挂。
+
+### 5.11 `provider: redis` 但没引入 Redis 依赖
+
+- **现象**：启动失败：`FeignAuth: feign-auth.cache.provider=redis but no RedisConnectionFactory is available in the context; add spring-boot-starter-data-redis and configure spring.redis.*, or set feign-auth.cache.provider=local for the in-memory cache`。
+- **原因**：2.0.0 起 `spring-boot-starter-data-redis` 是 optional，不再传递引入。
+- **改法**：加依赖并配置连接；单机或先用本地缓存就把 `provider` 改回 `local`。
+
+### 5.12 超时写成 `0` 或负数
+
+- **现象**：启动期 `FeignAuth: invalid configuration feign-auth.http.connect-timeout=..., must be a positive duration (0 means infinite wait)`。
+- **原因**：Apache HttpClient 把 `0` 当作无限等待，starter 不做静默钳制，直接拒绝。
+- **改法**：写成 `5s`、`500ms`、`1m` 这类正时长（不足 1 毫秒的正值同样非法）。
+
+> 另有两条容易误会的行为，不是错误但常被当成配错：一是 starter 只把令牌注入 **Header**，不会替你写进查询参数或请求体；二是 `request-headers` 与 `token-request-headers` 各管各的，不会互相带过去，需要两边都带就分别写两份。
 
 ---
 
@@ -470,7 +719,7 @@ token-prefix: "Bearer "     # 结果为 Authorization: Bearer eyJ...
 补充规则：
 
 - 走 Basic 时，参数表里会**移除**凭证两个字段（字段名取自 `request-fields`，改名后同样生效），`grant_type` 等其余参数照发。
-- 如果你在 `token-request-headers` 或 `HeaderCustomizer` 里已经设置了 `Authorization`，以你的配置为准：在 `basic`（或 `get` + `auto`）本该走 Basic 的场景下，starter 不再代发凭据，凭证也不会出现在参数里，只在 DEBUG 记一条说明。`post` + `auto` 时凭证仍按参数发送，你设置的 `Authorization` 会原样带到取号请求上。
+- 如果你在 `token-request-headers` 或 `HeaderCustomizer` 里已经设置了 `Authorization`，以你的配置为准：在 `basic`（或 `get` + `auto`）本该走 Basic 的场景下，starter 不再代发凭证，凭证也不会出现在参数里，只在 DEBUG 记一条说明。`post` + `auto` 时凭证仍按参数发送，你设置的 `Authorization` 会原样带到取号请求上。
 - Basic 编码使用 UTF-8。`client_id` 含冒号时无法构造 Basic，会抛 `FeignAuthConfigurationException` 并点名服务与两种修法。
 - 显式选 `parameters` 且 `method: get` 时，`client_secret` 会出现在 URL 中；starter 不阻止，但按服务记一次 WARN（每服务一条）。
 
@@ -620,6 +869,12 @@ base-url: https://api.x.com/v1
 ---
 
 ## 9. Header 注入
+
+> **本节是可选能力，不属于必需项。** 只要认证本身配好了（OAuth2 的 `token-url` + `clients`，或 API Key 的 `value`），下面这些一项都不配，请求照样带上认证 Header 正常发出：
+>
+> - `request-headers` / `token-request-headers`：默认都是空 Map，不配就不会额外附带静态 Header。
+> - `HeaderCustomizer`：容器里没有该 Bean 时，动态阶段不会写入任何 Header。
+> - 认证 Header 的名字也有默认值（OAuth2 取 `token-header`，空白则 `x-token`；API Key 取 `header-name`，空白则 `Authorization`），只有对端要求别的名字时才需要显式配置。
 
 ### 9.1 注入顺序
 
@@ -931,6 +1186,70 @@ cause 保留原始 `FeignException`，正文仍可从 cause 中读取。
 4. **取号问题看异常 cause**：`FeignAuthTokenException` 的 cause 链里有 IdP 的状态码与正文片段。
 5. **Redis 模式直接查键**：`GET feign-auth:token:<service>:<clientId>`。
 
+### 12.4 三个完整排障实例
+
+每个实例按「原文 → 逐句拆解 → 改哪里 → 怎么确认改对」走一遍。报错文字取自源码里的消息模板，示例中的服务名与域名是虚构的。
+
+**实例一：`no service config matched`**
+
+```text
+FeignAuthConfigurationException: FeignAuth: no service config matched for
+baseUrl=http://api.example.com, path=/api/orders/1; configured services:
+[order -> https://api.example.com]; the Feign target URL must point to the same
+scheme/host/port as feign-auth.services.<name>.base-url (default ports 80/443 are
+normalized, a base-url path is treated as an outer prefix for path matching);
+set feign-auth.fail-on-no-match=false to send unmatched requests without auth headers
+```
+
+- 前半句 `baseUrl=http://api.example.com` 是 Feign **实际** target 拆出来的 `scheme://host:port`，来自 `@FeignClient(url = ...)`。
+- `configured services: [order -> https://api.example.com]` 是你 YAML 里配的每一项。
+- 两者只差在 `http` 与 `https`——协议不同就不算同一个 authority，所以匹配不上。
+
+改法二选一：把 `@FeignClient(url = "${feign-auth.services.order.base-url}")` 改成引用配置（推荐：两边引用同一个值，不会再对不齐）；或把 YAML 的 `base-url` 改成 `http://api.example.com`。生产环境应该统一走 HTTPS，不要为了跑通把 `base-url` 降级。
+
+确认：再发一次请求，日志出现 `fetching new token`（INFO）与 `service='order' header='x-token' path=/api/orders/1`（DEBUG），说明这次匹配上了。
+
+**实例二：取号被 IdP 拒绝（报文编码对不上）**
+
+```text
+ERROR ... FeignAuthRequestInterceptor : FeignAuth [oauth2] failed to obtain token for
+service='order', path=/api/orders/1: Token request failed: 400, error=invalid_request,
+error_description=...
+```
+
+冒号后面这一段是 starter 从 IdP 响应体里原样带出来的（`error` / `error_description` 字段，超过 512 字符会截断），不是 starter 自己造的错。
+
+- 先分清责任：按 4.9 用 curl 手工取一次号。表单 curl 能成功、starter 失败，说明对方只认表单，而 starter 默认 POST 发的是 **JSON**。
+- 改法：显式声明表单编码，starter 会同时把请求体和这个头一起按表单发：
+
+```yaml
+auth:
+  token-request-headers:
+    Content-Type: application/x-www-form-urlencoded
+```
+
+- 如果 curl 也失败，就不要动 starter 配置，回去核对 `client_id` / `client_secret` / `grant_type` 与认证方式（`client-authentication`）。
+- 顺带一条：`Content-Type` 写成既不是 JSON 族也不是表单的值，首次取号会抛 `Unsupported OAuth2 token request Content-Type: '...'`，请求根本不会发出，这是有意的（避免头体错配）。
+
+**实例三：令牌能取到，对端却一直 401，而且日志里全是 `fetching new token`**
+
+```text
+INFO  TokenFetcher : FeignAuth [oauth2] fetching new token for service='order', clientId='my-client'
+WARN  TokenFetcher : FeignAuth [oauth2] token eviction suppressed within cooldown for service='order', clientId='my-client'
+```
+
+- 这是「每次调用都被 401 → 命中默认 `expired-token-statuses: [401, 421, 423]` → 驱逐令牌并重新取号」的循环，不是 IdP 挂了。
+- 真正的原因几乎都在 Header 写法上：对端要求 `Authorization: Bearer <token>`，而 starter 默认注的是 `x-token: <token>`。
+
+```yaml
+auth:
+  token-header: Authorization
+  token-prefix: "Bearer "      # 尾部空格必须保留，见 5.3
+```
+
+- 如果你确认对端的过期信号不是 401（例如网关统一用 `421`，或者错误码在响应体的业务字段里），就收窄判定条件，别把与令牌无关的 401 也算成过期：配 `expired-token-statuses`，必要时配 `response-status-field`（见 11.1）。
+- 30 秒冷却只是挡住同一对 `{服务名}:{clientId}` 的重复驱逐，不会替你修好 Header；日志里那条 `token eviction suppressed within cooldown` 正说明你在被 401 反复打到。
+
 ---
 
 ## 13. 日志与可观测性
@@ -942,7 +1261,7 @@ cause 保留原始 `FeignException`，正文仍可从 cause 中读取。
 | `...feign.FeignAuthStatusHandler` | WARN | 令牌过期驱逐/冷却、读取响应体失败、URL 解析失败（每 URL 一次） |
 | `...oauth2.TokenFetcher` | INFO | `fetching new token`、`token evicted` |
 | `...oauth2.TokenFetcher` | WARN | 冷却期内驱逐被抑制 |
-| `...oauth2.TokenEndpointWarnings` | WARN / DEBUG | 凭据进查询串（每服务一次）、非 HTTPS `token-url`（每服务一次）、Authorization 已配置所以不代发（DEBUG） |
+| `...oauth2.TokenEndpointWarnings` | WARN / DEBUG | 凭证进查询串（每服务一次）、非 HTTPS `token-url`（每服务一次）、Authorization 已配置所以不代发（DEBUG） |
 | `...oauth2.OAuth2TokenRequestClient` | WARN | `Failed to close token response: ...` |
 | `...oauth2.lock.RedisLockProvider` | WARN | 解锁失败，锁会随 TTL 过期 |
 | `...oauth2.store.RedisTokenStore` | WARN | 反序列化失败/值类型异常，已删除坏键 |
@@ -971,7 +1290,7 @@ public TokenStore tokenStore() {
 ```
 
 - 提供后 starter 的本地/Redis TokenStore 让位。
-- 只替换 `TokenStore` 而保留默认 `LockProvider` 时，Redis provider 的启动校验仍会要求 Redis 连接（见 14.6）。
+- 只替换 `TokenStore` 而保留默认 `LockProvider` 时，Redis provider 的启动校验仍会要求 Redis 连接（见 10.3）。
 
 ### 14.3 自定义 `LockProvider`
 
@@ -1078,7 +1397,7 @@ Authorization: Basic base64(my-id:my-secret)
 
 ### 场景 3：老 IdP 只认查询参数
 
-IdP 不支持 Basic，只能用 GET + query。选 `parameters`，starter 会记一条 WARN 提示凭据泄露面。
+IdP 不支持 Basic，只能用 GET + query。选 `parameters`，starter 会记一条 WARN 提示凭证泄露风险。
 
 ```yaml
 auth:
@@ -1586,3 +1905,43 @@ feign-auth.services.x.base-url → FEIGNAUTH_SERVICES_X_BASEURL（新）
 | 本地锁分段数 | 64 |
 | 请求路径前缀的 token 字段顺序 | `access_token` → `accessToken` → `token` |
 | 过期时间字段搜索顺序（最多 3 层） | `expires_in` → `expiresIn` → `expire_in` → `expireIn` |
+
+---
+
+## 附：术语表
+
+按本文用法解释，不是通用定义的完整版本。
+
+| 术语 | 在本文里的意思 | 主要出现在 |
+|---|---|---|
+| starter | Spring Boot 的「自动装配依赖包」：引进来就自动生效，不需要你写 `@Bean` | 全文 |
+| Bean / 容器 | 交给 Spring 管理的对象。starter 的取号器、匹配器、缓存都是 Bean | 3.3、14 |
+| OpenFeign / Feign | 把 HTTP 调用写成 Java 接口的框架；`@FeignClient` 标注的那个接口就是你要用的客户端 | 4.2、4.5 |
+| 拦截器（`RequestInterceptor`） | 请求发出前必过的一段代码，starter 在这里把令牌塞进 Header | 9 |
+| 错误解码器（`ErrorDecoder`） | 收到非 2xx 响应时决定「抛什么异常」的一段代码，starter 在这里判断令牌是否过期 | 11 |
+| 重试器（`Retryer`） | 决定失败的请求是否再发一次、间隔多久 | 11.4 |
+| OAuth2 | 一种「先拿令牌、再带令牌访问」的授权协议；本文只用 `client_credentials`（机器对机器）这一种模式 | 7.1 |
+| IdP | Identity Provider，发令牌的那台服务器（`token-url` 指向它） | 6.3、7.1、12.2 |
+| `access_token` / 令牌 | IdP 发给你的访问凭证，有效期内可重复使用，过期后要重新取 | 7.1.5、10 |
+| `client_id` / `client_secret` | 应用的身份与密码，用来换令牌；配在 `auth.clients[]` 下 | 6.4 |
+| Basic 认证 | 把 `client_id:client_secret` 做 Base64 后放进 `Authorization` 头，而不是放进请求体 | 7.1.2 |
+| TTL | 令牌还能活多少秒；starter 用它决定缓存过期时间 | 7.1.5、10.1 |
+| Header | HTTP 请求头，键值对；对端靠它认令牌 | 9 |
+| authority / `baseUrl` | URL 里的 `scheme://host:port` 部分。starter 用它认服务，`base-url` 上的路径另作前缀用 | 8.1、8.2 |
+| 路径前缀 | `clients[].path-prefixes` / `auth.path-prefixes` 里写的路径开头，用来区分同一 host 下的不同服务或凭证 | 8.3 |
+| 兜底 / 默认 Client | 没配路径前缀的那一项，前缀都不命中时用它 | 6.4、8.3 |
+| 缓存键 | 令牌在缓存里的名字，格式 `{服务名}:{clientId}`；Redis 下还会带 `key-prefix` | 10.1 |
+| 驱逐（evict） | 把缓存里的令牌扔掉，下次请求重新取号 | 11.2 |
+| 重放（replay） | 驱逐后用新令牌把刚才那个请求再发一次 | 11.2 |
+| 幂等 | 同一请求发两次不会造成两次后果；不幂等的接口不能随便重放 | 11.4、16 |
+| 锁 / 分布式锁 | 防止多个线程或多个实例同时去取号，只让一个去拿 | 10.4 |
+| 双重检查 | 拿到锁后再看一遍缓存，避免白取一次号 | 10.5 |
+| kebab-case | 全小写、用短横线分词的写法，如 `token-url` | 6.8 |
+| 宽松绑定 | Spring Boot 允许 `token-url`、`tokenUrl`、`TOKEN_URL` 都绑到同一项；推荐统一写 kebab-case | 6.8 |
+| `Duration` | 时长写法：`5s`、`500ms`、`1m` | 6.7、6.8 |
+| 占位符 `${...}` | YAML/注解里引用别处的值，如 `${ORDER_SECRET}` 引用环境变量 | 4.5、6.8 |
+| BOM | 一份「版本清单」依赖，import 之后其它依赖不用逐个写版本号 | 4.2 |
+| optional 依赖 | 不向下传递的依赖：Redis 与 feign-core 都是 optional，需要你自己声明 | 2、3.1 |
+| 启动期 / 请求期 | 启动期失败=应用起不来；请求期失败=能启动，用到才报错。两者的排查方式不同 | 6.9、12.1 |
+| 明文 / HTTPS | `http://` 下密钥与令牌在网络上是可读的；`token-url` 非 HTTPS 时 starter 会告警 | 12、16 |
+| nonce / HMAC 签名 | 某些对端要求每次请求带一次性随机数与签名，只能自己实现 `HeaderCustomizer` | 9.3、14.1 |
